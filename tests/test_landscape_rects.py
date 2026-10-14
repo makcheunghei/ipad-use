@@ -206,6 +206,16 @@ class LandscapeRectTests(unittest.TestCase):
         self.expire_viewport(controller)
         self.assertEqual(controller.describe({"element_id": "target", "index": 0})["tap"], [150, 122])
 
+    def test_tap_that_opens_another_app_rechecks_frames_within_ttl(self):
+        wda, controller = self.make(LEFT)
+        rects(controller)
+        controller.tap(selector={"label": "Target"})  # this tap opens another app
+        wda.app, wda.source_root = "com.example.other", dict(LANDSCAPE)
+        wda.elements[0]["rect"] = {"x": 100, "y": 100, "width": 100, "height": 44}
+        # No viewport expiry: the next selector use is well inside ROTATION_VIEWPORT_TTL.
+        found = controller.find({"label": "Target"})
+        self.assertEqual(found["elements"][0]["tap"], [150, 122])
+
     def test_failed_rotation_read_leaves_element_for_retry(self):
         wda, controller = self.make(LEFT)
         original = wda.source

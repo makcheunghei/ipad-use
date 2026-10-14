@@ -1,4 +1,4 @@
-"""Optimistic iPhone operations with optional observations and explicit verification."""
+"""Optimistic iPhone / iPad operations with optional observations and explicit verification."""
 import base64
 import collections
 import datetime as dt
@@ -25,6 +25,8 @@ CANDIDATE_LIMIT = 8
 VIEWPORT_TTL = 30
 # Before converting an element rect, /window/size, /rotation and the foreground app are
 # re-read once this many seconds have passed, so a device turn or app switch is noticed.
+# Known limit: a 180 degree flip within this window (no toolbar action, no accepted action
+# in between) is only noticed once the window passes.
 ROTATION_VIEWPORT_TTL = 1.5
 ROTATION_UNKNOWN_WARNING = ("rotation_unknown: the viewport is landscape but element frames are portrait and the "
                             "rotation direction could not be determined; element positions were left unconverted. "
@@ -210,6 +212,7 @@ class PhoneController:
             self.screen_event("drag",**{"from_point":{"x":payload["fromX"],"y":payload["fromY"]},"to_point":{"x":payload["toX"],"y":payload["toY"]},"duration_ms":max(300,min(3000,int((payload.get("duration",0)+.35)*1000)))})
         result=self.client.session("POST",path,payload,timeout=timeout) if session else self.client.request("POST",path,payload,timeout=timeout)
         self.accepted_actions+=1
+        self._probe=None  # an accepted action may have switched app or rotated: re-read before reuse
         return result
 
     def viewport(self,max_age=0):
@@ -320,22 +323,23 @@ class PhoneController:
             return None
         stamp=self._viewport_cache[0] if self._viewport_cache else None
         if not self._probe or self._probe[0]!=stamp or stamp is None:
-            # The viewport was just re-read: re-read the side (a 180 degree flip keeps the same
-            # viewport) and the foreground app (frames belong to the app that drew them).
+            # The viewport was just re-read (or an action was accepted): re-read the foreground
+            # app (frames belong to the app that drew them) and, when needed, the side.
             try:app=self.active_app()
-            except WDAError:app=None
-            self._probe=(stamp,self.rotation_side(),app)
+            except Exception:app=None
+            self._probe=(stamp,None,app)
         _,side,app=self._probe
-        if side is None:
-            # Unknown side is never cached: ask /rotation again on every use.
-            side=self.rotation_side()
-            if side:self._probe=(self._probe[0],side,app)
         key=(viewport["width"],viewport["height"],app)
         if key not in self._frames:
             # Cold cache: one source read records this app's frame shape. It also refreshes
             # _source_app, which is the same foreground app just read.
             self.tree(include_invisible=True)
             key=(viewport["width"],viewport["height"],self._source_app or app)
+            _,side,app=self._probe
+        if self._frames.get(key) is not None and side is None:
+            # /rotation only matters for portrait frames; an unknown side is asked again every use.
+            side=self.rotation_side()
+            if side:self._probe=(self._probe[0],side,app)
         self._rotation=self.rotation_for(self._frames.get(key),side)
         self.rotation_unknown=self._rotation=="unknown"
         return self._rotation
