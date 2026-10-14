@@ -48,7 +48,7 @@ class SnapshotRestoreRuntimeTests(unittest.TestCase):
         runtime.phone.screen = runtime.screen
         runtime.client.session_id = runtime.client._settings_session_id = "shared-session"
         runtime.phone._viewport_cache = (time.monotonic(), {
-            "width": 390, "height": 844, "units": "iPhone points"})
+            "width": 390, "height": 844, "units": "device points"})
         self.addCleanup(runtime.close)
         return runtime
 

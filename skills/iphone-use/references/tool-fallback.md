@@ -17,14 +17,14 @@
 - `pua_timeout`：socket 等待或调用预算耗尽，不证明断连。按返回的 `retry_after_seconds` 在宿主侧等待（当前为 2 秒），再取一次 `pua_observe(mode="screenshot")`，不要立即重试整树或动作，也不用 `pua_wait`（它会新增 AX 查询）。截图仍超时最多再延迟尝试一次，之后调用 `pua_setup(action="status")` 诊断；重复超时本身不授权重启。若原调用是 READY，用相同参数延迟重试 READY，而不是换成观察、start 或 recover。
 - `pua_unreachable`：连接拒绝、连接重置、管道关闭或 EOF 等 HTTP 通道连接失败。调用 `pua_setup(action="status")`，复用当前 start / recover 工作；确认服务未运行且已配置、没有活动工作、用户允许启动时才 start 一次。连接失败本身不证明物理 USB 已拔出。
 - `pua_transport_error`：其他传输或协议异常，按返回细节检查 setup status / 日志，不当作超时或确定断连，也不自动重启或重放动作。
-- 查询失败不证明手机动作已执行，POST 查询接口不应按 mutation 处理；查询超时不自动立即重读，遵循上述有界延迟恢复。
-- `local.pid.0`、`pua_foreground_unavailable` 或 XCTest Code 41：通道故障，调用 READY 恢复；不要通过更改 selector 或重复手机按钮处理。锁屏、签名和信任问题按 setup skill；App 密码 / Face ID 按认证接管。
+- 查询失败不证明设备动作已执行，POST 查询接口不应按 mutation 处理；查询超时不自动立即重读，遵循上述有界延迟恢复。
+- `local.pid.0`、`pua_foreground_unavailable` 或 XCTest Code 41：通道故障，调用 READY 恢复；不要通过更改 selector 或重复设备按钮处理。锁屏、签名和信任问题按 setup skill；App 密码 / Face ID 按认证接管。
 
 通过 `functions.exec` 时逐个内容块转发：文字用 `text(block.text)`，图片用 `image(block)`；不要 `text(result)` 把截图变成 base64 文本。图片无法转发时用 `view_image` 打开 `image.path` / `error.observation.image.path`。坐标按 `pixel_to_point` 换算。
 
 普通 `verified=false` 不是错误，不要求 observe 或停止 batch。HTTP accepted 只描述请求边界；常规路径继续，最终关键状态显式验收。
 
-Home 使用手机端专用主屏幕端点。默认不单独等待 SpringBoard；准备下一步时的观察会显示实际状态。需要确认主屏时显式 `verify=true`，它有界核对前台；通用按键接口返回 HTTP 200 而界面未变的问题不能据此推定 iOS / XCTest 的内部原因。
+Home 使用设备端专用主屏幕端点。默认不单独等待 SpringBoard；准备下一步时的观察会显示实际状态。需要确认主屏时显式 `verify=true`，它有界核对前台；通用按键接口返回 HTTP 200 而界面未变的问题不能据此推定 iOS / XCTest 的内部原因。
 
 ## READY 的有界恢复
 
@@ -34,9 +34,9 @@ READY 的 `pua_timeout` 不进入重启流程：按 `retry_after_seconds` 在宿
 
 `ready=false, state="recovering"` 携带 recovery.job_id 和查询参数。status 返回 `jobs` 数组，找到 id 与 job_id 相等的工作；检查 recovery_phase，从 stopping / starting 到 serving 后重验 READY。Runner 可以长期 running，不等 succeeded、不重复 start。按阶段、日志和 retry_after_seconds 查询，不写固定 15 秒 × 20 次的等待循环，也不能读取不存在的单个 job 并吞掉解析异常。
 
-`ready=false, state="recovery_required", reason="recovery_disabled"` 时，用户指令允许才按 next_tool / next_arguments 调用 recover=true；明确禁止则说明阻塞。正常未就绪状态没有 error、MCP isError=false，仍不能继续手机动作。达到 `ready=true` 后直接复用其中的 observation 准备下一步，不紧接着重新 observe。
+`ready=false, state="recovery_required", reason="recovery_disabled"` 时，用户指令允许才按 next_tool / next_arguments 调用 recover=true；明确禁止则说明阻塞。正常未就绪状态没有 error、MCP isError=false，仍不能继续设备动作。达到 `ready=true` 后直接复用其中的 observation 准备下一步，不紧接着重新 observe。
 
-恢复要求配置、endpoint、worker 和监听端口归属匹配，归属不明、外部 PUA、端口冲突或缺少构建按返回步骤处理，不按端口杀进程。120 秒冷却按 retry_after_seconds 诊断，不连续重启。信任、解锁和 UI 自动化确认由用户在手机完成。
+恢复要求配置、endpoint、worker 和监听端口归属匹配，归属不明、外部 PUA、端口冲突或缺少构建按返回步骤处理，不按端口杀进程。120 秒冷却按 retry_after_seconds 诊断，不连续重启。信任、解锁和 UI 自动化确认由用户在设备完成。
 
 ## 直接执行提供的脚本
 
@@ -48,7 +48,7 @@ python3 <PLUGIN_ROOT>/scripts/phone.py pua_press_button '{"name":"home","observe
 
 脚本使用默认 `~/.local/share/iphone-use` 的共享会话与操作锁，返回结构化结果。下一步需要未知页面信息时在本次动作显式选择 observe；需要关键验收时显式 verify=true。命令输出只有 JSON：截图位于 `image.path`（已缩放的 JPEG，同名 `.png` 是原始截图），需要查看时用可用的图片工具打开，像素乘以 `image.pixel_to_point` 得到 iPhone 点。
 
-只有原通道确实使用非默认目录 / URL 才传匹配的 --state-dir / --url；不得为避开 busy 换目录或并行控制同一手机。
+只有原通道确实使用非默认目录 / URL 才传匹配的 --state-dir / --url；不得为避开 busy 换目录或并行控制同一设备。
 
 ## 写最小调用代码
 

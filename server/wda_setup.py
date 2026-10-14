@@ -114,7 +114,7 @@ def _diagnose(text):
     text = text.lower()
     cases = [
         (("not authorized for performing ui testing actions", "xctdaemonerror code=41", "xctdaemonerror code = 41"),
-         "XCTest UI automation authorization is unavailable even if WDA status.ready is true. Inspect setup status, stop only this plugin's owned start job, start it again and verify pua_ready with a current UI observation. Preserve external services and ask their owner to restart them. If authorization still fails, check Developer Mode and Enable UI Automation on the unlocked iPhone; do not bypass trust or authentication prompts."),
+         "XCTest UI automation authorization is unavailable even if WDA status.ready is true. Inspect setup status, stop only this plugin's owned start job, start it again and verify pua_ready with a current UI observation. Preserve external services and ask their owner to restart them. If authorization still fails, check Developer Mode and Enable UI Automation on the unlocked device; do not bypass trust or authentication prompts."),
         (("maximum number", "three apps", "3 apps", "0xe8008029"),
          "Personal Team app limit: review development apps on the phone yourself. Do not uninstall automatically; remove an app only with the owner's explicit instruction, or use a paid team."),
         (("no accounts", "authentication", "not logged in", "unable to log in", "session has expired"),
@@ -124,13 +124,13 @@ def _diagnose(text):
         (("expired", "0xe8008015", "0xe8008018"),
          "The signing certificate or provisioning profile may have expired. Refresh the Xcode account, rebuild WDA and reinstall the runner; Personal Team profiles commonly need renewal after 7 days."),
         (("developer mode", "developermode"),
-         "On the iPhone enable Settings > Privacy & Security > Developer Mode, restart and confirm the prompt yourself."),
+         "On the device enable Settings > Privacy & Security > Developer Mode, restart and confirm the prompt yourself."),
         (("untrusted", "invalid code signature", "0xe800801c", "not trusted"),
-         "On the iPhone open Settings > General > VPN & Device Management and trust your development certificate yourself, then unlock the phone and retry."),
+         "On the device open Settings > General > VPN & Device Management and trust your development certificate yourself, then unlock the phone and retry."),
         (("locked", "unlock", "passcode"),
-         "Unlock the iPhone yourself and keep it awake while the WDA test runner starts. Do not share the passcode."),
+         "Unlock the device yourself and keep it awake while the WDA test runner starts. Do not share the passcode."),
         (("not paired", "trust this computer", "pairing"),
-         "Reconnect USB, unlock the iPhone, accept Trust This Computer yourself and verify pairing in Xcode Window > Devices and Simulators."),
+         "Reconnect USB, unlock the device, accept Trust This Computer yourself and verify pairing in Xcode Window > Devices and Simulators."),
         (("address already in use", "eaddrinuse", "local forward port is occupied"),
          "The local forward port is in use. Reuse an already healthy WDA, stop only this plugin's owned job, or configure another local port; do not kill unrelated processes."),
     ]
@@ -289,11 +289,11 @@ class SetupManager:
         if not checks["configured"]:
             next_steps.append("Discover the device, then configure its explicit UDID, your Apple Team ID and a unique reverse-DNS bundle ID.")
         if config and not chosen:
-            next_steps.append("Reconnect the selected iPhone by USB and confirm its UDID in Xcode Devices and Simulators.")
+            next_steps.append("Reconnect the selected iPhone / iPad by USB and confirm its UDID in Xcode Devices and Simulators.")
         if not checks["paired"]:
-            next_steps.append("Unlock the iPhone and accept Trust This Computer yourself; verify pairing in Xcode.")
+            next_steps.append("Unlock the device and accept Trust This Computer yourself; verify pairing in Xcode.")
         if not checks["developer_mode"]:
-            next_steps.append("Enable iPhone Settings > Privacy & Security > Developer Mode, restart and confirm it yourself.")
+            next_steps.append("Enable the device's Settings > Privacy & Security > Developer Mode, restart and confirm it yourself.")
         if not checks["pinned_source"]:
             next_steps.append("Run fetch for the isolated pinned Appium WDA source, or reuse an unchanged checkout at the pinned commit.")
         next_steps.extend(["In Xcode Settings > Accounts, sign in yourself and select your signing team; do not share passwords or verification codes.",
@@ -326,7 +326,7 @@ class SetupManager:
             values = plistlib.loads(decoded["stdout"].encode())
             expiration = values["ExpirationDate"].replace(tzinfo=dt.timezone.utc)
             return {"known": True, "expires_at": expiration.isoformat(), "expired": expiration <= dt.datetime.now(dt.timezone.utc),
-                    "note": "Provisioning expiry does not verify iPhone certificate trust or Apple account login."}
+                    "note": "Provisioning expiry does not verify device certificate trust or Apple account login."}
         except (ValueError, KeyError, AttributeError):
             return {"known": False, "note": "Could not decode the built provisioning profile; verify signing in Xcode."}
 
@@ -455,7 +455,7 @@ class SetupManager:
                         return {"ok": False, "error": "A recent recovery attempt is still within the restart cooldown.",
                                 "job_id": job["id"], "job": self._job_status(job),
                                 "recovery": {"state": "cooldown", "job_id": job["id"], "retry_after_seconds": max(1, int(RECOVERY_COOLDOWN_SECONDS - elapsed + 1))},
-                                "next_steps": ["Inspect the recovery job and its log, unlock the iPhone and check Developer Mode / Enable UI Automation. Do not repeatedly restart WDA."]}
+                                "next_steps": ["Inspect the recovery job and its log, unlock the device and check Developer Mode / Enable UI Automation. Do not repeatedly restart WDA."]}
                 targets = [job for job in jobs if (job.get("action") == "start" or
                                                   (job.get("action") == "recover" and job.get("recovery_phase") == "serving"))
                            and job.get("state") in ACTIVE_STATES

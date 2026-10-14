@@ -184,7 +184,7 @@ class AppCatalog:
                                     text=True, capture_output=True, timeout=10, check=False)
             document = _read(name, {})
             if result.returncode != 0 or self._installed_apps(document) is None:
-                return [], False, "Could not list selected-device apps. Unlock/connect the iPhone, verify Xcode pairing and retry; catalog candidates are not installation proof."
+                return [], False, "Could not list selected-device apps. Unlock/connect the device, verify Xcode pairing and retry; catalog candidates are not installation proof."
             rows = self.parse_installed(document)
             for row in rows:
                 row["verified_at"] = _now()
