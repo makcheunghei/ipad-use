@@ -23,6 +23,11 @@ SELECTOR_FIELDS = {"label","label_contains","name","value","type","enabled","pre
 CANDIDATE_LIMIT = 8
 # Bounds checks reuse the viewport briefly; an observation or a supplied ID reads it again.
 VIEWPORT_TTL = 30
+# Element rects are checked against a viewport no older than this, so a rotation is noticed.
+ROTATION_VIEWPORT_TTL = 1.5
+ROTATION_UNKNOWN_WARNING = ("rotation_unknown: the viewport is landscape but element frames are portrait and the "
+                            "rotation direction could not be determined; element positions were left unconverted. "
+                            "Use screenshot pixels x image.pixel_to_point for taps.")
 # One typing request stays short; one tool call stops typing at the budget and hands back a token.
 TYPING_FREQUENCY = 30
 TYPING_PIECE = 200
@@ -158,6 +163,9 @@ class PhoneController:
         self._screen_targets={}
         self._viewport_cache=None
         self._rotation=None
+        # (viewport width, height) -> rotation tuple, or None when frames already match.
+        self._rotations={}
+        self.rotation_unknown=False
         self._source_app=None
         self._deadline=None
         self.pending_input=None
@@ -225,39 +233,75 @@ class PhoneController:
         self._viewport_cache=(time.monotonic(),cached[1])
         return dict(cached[1])
 
-    def portrait_frame_rotation(self,root,viewport):
+    def portrait_frame_rotation(self,root,viewport,nodes=()):
         """Detect a landscape viewport whose source frames are still portrait.
 
-        Seen on iPad (WDA 16.x): /window/size is landscape (1376x1032) while the
+        Only this case is handled: a landscape /window/size with a portrait-shaped
+        source root. Portrait viewports and already-matching frames return None.
+
+        Seen on iPad (WDA 16.14.0): /window/size is landscape (1376x1032) while the
         source root and element frames use the portrait frame (1032x1376). Returns
-        (side, portrait_width, portrait_height) or None when frames already match.
+        (side, portrait_width, portrait_height), "unknown", or None when frames match.
+
+        GET /orientation cannot tell the landscapes apart: WDA's _wdOrientationsMapping
+        reports both as "LANDSCAPE". GET /rotation can: it returns the interface
+        orientation through fb_rotationMapping, z=270 when the device top edge is on
+        the left (home side right) and z=90 when it is on the right.
         """
         try:size=(float(root["width"]),float(root["height"]))
         except (KeyError,ValueError,TypeError):return None
         vw,vh=float(viewport["width"]),float(viewport["height"])
         if not (vw>vh and size==(vh,vw)):
             return None
-        try:orientation=str(self.client.session("GET","/orientation") or "")
-        except Exception:orientation=""
-        # WDA reports UIDeviceOrientationLandscapeLeft as "LANDSCAPE" and
-        # UIDeviceOrientationLandscapeRight as "UIA_DEVICE_ORIENTATION_LANDSCAPERIGHT".
-        side="right" if "RIGHT" in orientation.upper() else "left"
-        return (side,size[0],size[1])
+        side=self.rotation_side() or self.rotation_side_from_geometry(nodes,size)
+        return (side,size[0],size[1]) if side else "unknown"
+
+    def rotation_side(self):
+        try:value=self.client.session("GET","/rotation")
+        except Exception:return None
+        z=value.get("z") if isinstance(value,dict) else None
+        return {270:"left",90:"right"}.get(z) if isinstance(z,(int,float)) and not isinstance(z,bool) else None
+
+    @staticmethod
+    def rotation_side_from_geometry(nodes,size):
+        """Fallback: the landscape Dock is a tall, narrow strip at one portrait edge."""
+        portrait_width,portrait_height=size
+        sides=set()
+        for node in nodes:
+            r=node["rect"]
+            if r["height"]<portrait_height*.4 or r["width"]>portrait_width*.2 or r["width"]<=0:
+                continue
+            if r["x"]<=portrait_width*.03:sides.add("left")
+            elif r["x"]+r["width"]>=portrait_width*.97:sides.add("right")
+        return sides.pop() if len(sides)==1 else None
 
     def to_viewport_rect(self,rect,rotation=None):
         """Map a portrait-frame rect into the landscape point space taps use."""
         rotation=rotation or self._rotation
-        if not rotation:
+        if not isinstance(rotation,tuple):
             return rect
-        side,width,height=rotation
+        side,portrait_width,portrait_height=rotation
         x,y,w,h=rect["x"],rect["y"],rect["width"],rect["height"]
         if side=="left":
-            # Device turned counter-clockwise (home side right): portrait top edge is on the left.
-            mapped={"x":y,"y":width-(x+w),"width":h,"height":w}
+            # /rotation z=270: device top edge on the left, so portrait x runs bottom to top.
+            mapped={"x":y,"y":portrait_width-(x+w),"width":h,"height":w}
         else:
-            # Device turned clockwise: portrait top edge is on the right.
-            mapped={"x":height-(y+h),"y":x,"width":h,"height":w}
+            # /rotation z=90: device top edge on the right, so portrait y runs right to left.
+            mapped={"x":portrait_height-(y+h),"y":x,"width":h,"height":w}
         return {**rect,**mapped}
+
+    def current_rotation(self):
+        """Rotation for the current viewport, read fresh enough to notice a device turn."""
+        viewport=self.viewport(ROTATION_VIEWPORT_TTL)
+        key=(viewport["width"],viewport["height"])
+        if viewport["width"]<=viewport["height"]:
+            self._rotation=None;self.rotation_unknown=False
+            return None
+        if key not in self._rotations:
+            self.tree(include_invisible=True)  # one source read records the frame for this viewport
+        self._rotation=self._rotations.get(key)
+        self.rotation_unknown=self._rotation=="unknown"
+        return self._rotation
 
     def active_app(self,timeout=None):
         result=self.client.request("GET", "/wda/activeAppInfo",timeout=timeout).get("value") or {}
@@ -286,8 +330,7 @@ class PhoneController:
         bundle=root.get("bundleId")
         self._source_app=bundle if isinstance(bundle,str) and bundle and not bundle.startswith("local.pid.") else None
         viewport=self.source_viewport(root)
-        self._rotation=self.portrait_frame_rotation(root,viewport)
-        nodes=[]
+        raw=[]
         for element in tree.iter():
             a=element.attrib
             if not any(a.get(k) for k in ("label","name","value")) and a.get("type") not in ("XCUIElementTypeAlert","XCUIElementTypeSheet"):
@@ -298,7 +341,13 @@ class PhoneController:
                 continue
             if not all(math.isfinite(n) for n in rect.values()):
                 continue
-            rect=self.to_viewport_rect(rect)
+            raw.append((a,rect))
+        rotation=self.portrait_frame_rotation(root,viewport,[{"rect":r} for _,r in raw])
+        self._rotations[(viewport["width"],viewport["height"])]=self._rotation=rotation
+        self.rotation_unknown=rotation=="unknown"
+        nodes=[]
+        for a,rect in raw:
+            rect=self.to_viewport_rect(rect,rotation)
             intersects=rect["width"]>0 and rect["height"]>0 and rect["x"]<viewport["width"] and rect["y"]<viewport["height"] and rect["x"]+rect["width"]>0 and rect["y"]+rect["height"]>0
             if not include_invisible and (not intersects or a.get("visible")=="false"):
                 continue
@@ -379,6 +428,8 @@ class PhoneController:
                 result["warnings"]=["Empty accessibility tree: inspect a screenshot for lock, iPhone Mirroring conflict, loading, or custom-rendered content before acting."]
         if mode in ("screenshot","both"):
             result["image"]=self.capture(viewport)
+        if self.rotation_unknown:
+            result.setdefault("warnings",[]).append(ROTATION_UNKNOWN_WARNING)
         return result
 
     def capture(self,viewport):
@@ -456,9 +507,11 @@ class PhoneController:
         rect=element["rect"]
         if not isinstance(rect,dict) or not all(isinstance(rect.get(key),(int,float)) and not isinstance(rect.get(key),bool) and math.isfinite(rect[key]) for key in ("x","y","width","height")):
             fail("invalid_response","PUA element rect is not numeric.")
-        if self._rotation and not element.get("_rotated"):
-            element["rect"]=rect=self.to_viewport_rect(rect)
+        if not element.get("_rotated"):
             element["_rotated"]=True
+            rotation=self.current_rotation()
+            if isinstance(rotation,tuple):
+                element["rect"]=rect=self.to_viewport_rect(rect,rotation)
         return rect
 
     def element_hittable(self,element):
@@ -470,6 +523,7 @@ class PhoneController:
         rect=self.element_rect(element)
         described={"index":element["index"],**compact_node({**element,"rect":rect}),"tap":[round(rect["x"]+rect["width"]/2),round(rect["y"]+rect["height"]/2)]}
         if "hittable" in element:described["hittable"]=element["hittable"]
+        if self.rotation_unknown:described["warning"]=ROTATION_UNKNOWN_WARNING
         return described
 
     def switch_to_coordinates(self,error,typing=False):
@@ -499,7 +553,7 @@ class PhoneController:
         elif typing:
             tool,step="pua_tap","Inspect the attached screenshot FIRST for a popup or wrong page. Tap the visible editable field with pua_tap x/y, then call pua_type_text with text and no selector. If a prior tap failed to focus the field, do not repeat the same point blindly; choose a new target from the current screenshot."
         else:
-            tool,step="pua_tap","Inspect the attached screenshot FIRST, then tap the visible target with pua_tap x/y; a returned tap or tap_point is already in iPhone points."
+            tool,step="pua_tap","Inspect the attached screenshot FIRST, then tap the visible target with pua_tap x/y; a returned tap or tap_point is already in device points."
         recovery={**error.details.get("recovery",{}),"use":"coordinates" if error.code in SELECTOR_FAILURES else "screenshot","visual_check_required":True,"replay_action":False,
                   "next_step":step+" Image pixels x image.pixel_to_point give device points. Inspect the image content, not its base64 text; through functions.exec forward image blocks with image(block), or open observation.image.path with view_image. If no screenshot is available, take one pua_observe(mode=screenshot) before acting. Do not try other selector spellings or read the tree again first."}
         recovery.pop("next_tool",None);recovery.pop("next_arguments",None)

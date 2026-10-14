@@ -24,13 +24,13 @@ def retell(entries, told, where):
 
 INSTRUCTIONS = retell(base.INSTRUCTIONS, [
     base.INSTRUCTIONS[0][1],
-    "Doubao Work shows the live iPhone screen in its side panel, opened by pua_screen(): READY does not open it. After the first READY in a chat call pua_screen() once so the user can watch; an open panel follows the phone by itself, so do not call pua_screen again to refresh it. ",
+    "Doubao Work shows the live iPhone / iPad screen in its side panel, opened by pua_screen(): READY does not open it. After the first READY in a chat call pua_screen() once so the user can watch; an open panel follows the phone by itself, so do not call pua_screen again to refresh it. ",
     "use the host question tool (interaction.ask in Doubao Work; without one, ask in your reply and stop), first option exactly 已完成继续. Wait for the actual user answer; a skipped, timed-out or preselected question is not confirmation.",
 ], "INSTRUCTIONS")
 
 TOOL_DESCRIPTIONS = {
     "pua_screen": retell(base.TOOL_DESCRIPTIONS["pua_screen"], [
-        "Open the live iPhone screen in the Doubao Work side panel.",
+        "Open the live iPhone / iPad screen in the Doubao Work side panel.",
         "READY does not open it: call this once after the first READY in a chat.",
     ], "pua_screen"),
 }
@@ -38,13 +38,13 @@ TOOL_DESCRIPTIONS = {
 ASK = "宿主提问工具（豆包工作中为 `interaction.ask`；本对话没有提问工具时在回复里直接问并停下）"
 SKILLS = {
     "skills/iphone-use/SKILL.md": retell(base.SKILLS["skills/iphone-use/SKILL.md"], [
-        "豆包工作把手机屏幕显示在侧边栏，由 `pua_screen()` 打开，READY 不会打开它。本对话第一次 READY 成功后调用一次 `pua_screen()` 让用户观看；面板打开后自己跟随手机，暂停 / 恢复预览沿用同一个面板。已有面板时直接继续，不为刷新再调用 `pua_screen()`，也不要为打开画面重复 READY。",
+        "豆包工作把设备屏幕显示在侧边栏，由 `pua_screen()` 打开，READY 不会打开它。本对话第一次 READY 成功后调用一次 `pua_screen()` 让用户观看；面板打开后自己跟随设备，暂停 / 恢复预览沿用同一个面板。已有面板时直接继续，不为刷新再调用 `pua_screen()`，也不要为打开画面重复 READY。",
         f"必须调用{ASK}，首个选项固定「已完成继续」，第二个可为「暂时无法完成」。提问被跳过、超时或预选不是用户答复；",
         "豆包工作中直接调用 `mcp__iphone_use__pua_*` 工具，截图作为图片块随同一结果返回；点击、输入等失败结果同样附带图片块。如果结果里没有看到图片，用读取文件的工具打开返回的 `image.path` / `error.observation.image.path`；不能把图片元数据或 base64 当成看过截图。",
     ], "skills/iphone-use/SKILL.md") + [
         # Doubao Work can also operate apps on the Mac. The description is what tells a phone task apart.
-        ("description: 通过 PUA（Phone Use Agent）MCP 工具高效操作真实 iPhone；",
-         "description: 用户要在手机 / iPhone 上打开 App、搜索、点按、输入、发消息或读取内容时使用。通过 PUA（Phone Use Agent）MCP 工具高效操作真实 iPhone；"),
+        ("description: 通过 PUA（Phone Use Agent）MCP 工具高效操作真实 iPhone 或 iPad；",
+         "description: 用户要在手机 / iPhone 上打开 App、搜索、点按、输入、发消息或读取内容时使用。通过 PUA（Phone Use Agent）MCP 工具高效操作真实 iPhone 或 iPad；"),
     ],
     "skills/iphone-use/references/authentication.md": retell(base.SKILLS["skills/iphone-use/references/authentication.md"], [
         """在豆包工作中调用 `interaction.ask`，按该工具当前的实际 schema 填写；本对话没有提问工具时在回复里直接问并停下。例如当前明确显示 Face ID 时：
@@ -59,7 +59,7 @@ SKILLS = {
         "豆包工作版的 `<PLUGIN_ROOT>` 是安装目录，默认 `~/.local/share/iphone-use-doubao`；以自定义连接器 `iphone_use` 的参数里 `doubao/mcp_stdio.py` 所在的实际路径为准。",
     ], "skills/iphone-use/references/tool-fallback.md"),
     "skills/iphone-use-setup/SKILL.md": retell(base.SKILLS["skills/iphone-use-setup/SKILL.md"], [
-        "豆包工作中 READY 不会打开手机屏幕；取得 READY 后调用一次 `pua_screen()` 在侧边栏打开，已有面板时不再调用，也不要重复 READY。",
+        "豆包工作中 READY 不会打开设备屏幕；取得 READY 后调用一次 `pua_screen()` 在侧边栏打开，已有面板时不再调用，也不要重复 READY。",
         f"并必须调用可用的{ASK}，",
     ], "skills/iphone-use-setup/SKILL.md"),
 }
@@ -70,9 +70,9 @@ SKILL_NOTES = {
 ## 在豆包工作中使用
 
 - 工具名为 `mcp__iphone_use__pua_*`，由自定义连接器 `iphone_use` 提供，只在「本地电脑」环境的任务里可用。本回合没有这些工具时，请用户到「插件 · 技能 · 伙伴」的「管理 > 连接器」确认 `iphone_use` 已启用，然后新开任务。
-- 豆包工作自己也能操作这台 Mac 上的软件。用户说的是手机上的 App（或只说了 App 名而本机没有对应软件）时，用这里的 `pua_*` 工具在 iPhone 上完成，不要回答不支持该软件。
-- 手机屏幕在豆包工作侧边栏，由 `pua_screen()` 打开。面板没有画面不影响控制通道，也不是任务失败；按工具返回的观察继续。
-- 运行数据在 `~/.local/share/iphone-use`，与 Codex 版、WorkBuddy 版共用同一份配置、构建和操作锁；返回 `device_busy` 时可能是另一个宿主正在操作手机。
+- 豆包工作自己也能操作这台 Mac 上的软件。用户说的是手机 / iPad 上的 App（或只说了 App 名而本机没有对应软件）时，用这里的 `pua_*` 工具在 iPhone / iPad 上完成，不要回答不支持该软件。
+- 设备屏幕在豆包工作侧边栏，由 `pua_screen()` 打开。面板没有画面不影响控制通道，也不是任务失败；按工具返回的观察继续。
+- 运行数据在 `~/.local/share/iphone-use`，与 Codex 版、WorkBuddy 版共用同一份配置、构建和操作锁；返回 `device_busy` 时可能是另一个宿主正在操作设备。
 """,
     "skills/iphone-use-setup/SKILL.md": """
 ## 在豆包工作中使用

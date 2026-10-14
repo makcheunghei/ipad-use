@@ -10,10 +10,10 @@ start 默认最多等待 20 秒，服务就绪或工作结束时提前返回，�
 
 ## 超时不等于断连
 
-`pua_timeout` 表示 socket 等待或调用预算耗尽，手机端工作可能仍在执行，不能推断 USB 拔出或服务停止，也不立即重启、重读整树或重放动作。
+`pua_timeout` 表示 socket 等待或调用预算耗尽，设备端工作可能仍在执行，不能推断 USB 拔出或服务停止，也不立即重启、重读整树或重放动作。
 
 - READY 超时：按返回的 `retry_after_seconds` 在宿主侧等待（当前为 2 秒），再用相同参数重试 READY。最多两次延迟重试；仍超时才调用 `pua_setup(action="status")` 查看服务、工作与日志，不直接 start / recover。
-- 普通读取或动作后的观察超时：宿主侧等待后只取一次 `pua_observe(mode="screenshot")`；仍超时最多再延迟尝试一次，再用 setup status 诊断。不要用 `pua_wait` 等待，它会新增控件查询；不要同时启动其他手机请求。
+- 普通读取或动作后的观察超时：宿主侧等待后只取一次 `pua_observe(mode="screenshot")`；仍超时最多再延迟尝试一次，再用 setup status 诊断。不要用 `pua_wait` 等待，它会新增控件查询；不要同时启动其他设备请求。
 - `action_uncertain` 或 `action_executed=true, action_complete=false`：按 `transport_error` 和 recovery 先等待或检查连接，然后观察真实状态，只继续未完成的部分。不能因超时重复点击、输入、发送、支付或整个批次。
 
 重复超时本身不授权恢复或重启；setup 诊断确认服务未运行后才按下面的启动流程处理。`pua_transport_error` 是其他传输 / 协议异常，保留诊断信息，不按断连自动重启。`pua_unreachable` 表示 HTTP 通道连接拒绝、重置、管道关闭或 EOF 等连接失败，进入 setup 检查；它仍不证明物理 USB 已拔出。
@@ -35,8 +35,8 @@ start 默认最多等待 20 秒，服务就绪或工作结束时提前返回，�
 - `ready=false, state="recovering"`：按 recovery 的 job_id 和 status 参数查询同一工作。从返回的 `jobs` 数组找到该工作，recovery_phase=serving 后重验 READY；长期 Runner 可以保持 running，不等 succeeded，不重复 start。
 - `ready=false, state="recovery_required", reason="recovery_disabled"`：仅在用户指令允许恢复时按 next_tool / next_arguments 调用 recover=true；明确禁止重启则保留限制并报告阻塞。
 
-两种状态没有 error、MCP isError=false，仍不表示手机可操作。实际恢复拒绝、冷却、锁屏等按返回原因处理；按工作状态与返回的 retry_after_seconds 查询，不用固定长 sleep 或固定次数空轮询。
+两种状态没有 error、MCP isError=false，仍不表示设备可操作。实际恢复拒绝、冷却、锁屏等按返回原因处理；按工作状态与返回的 retry_after_seconds 查询，不用固定长 sleep 或固定次数空轮询。
 
 ## 屏幕预览
 
-widget 通过独立 USB MJPEG 通道显示最新手机画面，界面最多每秒读取 4 次服务端缓存，不轮询截图或 XML，也不占手机操作锁；长时间的手机操作期间预览照常刷新。首次操作后边缘渐变持续显示，认证暂停、断开 / 换流、关闭 / 重新加载后清除；圆形 cursor 标记实际点击位置或拖动路径，二者都不证明动作成功。widget 隐藏 / 关闭后停止轮询，预览租约 5 秒到期；认证暂停会停止采集，widget 保留暂停前的画面并叠加半透明接管遮罩，恢复必须等用户明确确认。更新插件后，已有聊天可能仍运行旧 MCP 进程和旧页面；重连聊天并重新打开 widget 加载新版，不能靠重复 READY 刷新缓存。`paused=true` 时显示「请在手机上接管操作」，只有用户确认完成后才 resume。
+widget 通过独立 USB MJPEG 通道显示最新设备画面，界面最多每秒读取 4 次服务端缓存，不轮询截图或 XML，也不占设备操作锁；长时间的设备操作期间预览照常刷新。首次操作后边缘渐变持续显示，认证暂停、断开 / 换流、关闭 / 重新加载后清除；圆形 cursor 标记实际点击位置或拖动路径，二者都不证明动作成功。widget 隐藏 / 关闭后停止轮询，预览租约 5 秒到期；认证暂停会停止采集，widget 保留暂停前的画面并叠加半透明接管遮罩，恢复必须等用户明确确认。更新插件后，已有聊天可能仍运行旧 MCP 进程和旧页面；重连聊天并重新打开 widget 加载新版，不能靠重复 READY 刷新缓存。`paused=true` 时显示「请在设备上接管操作」，只有用户确认完成后才 resume。

@@ -93,7 +93,7 @@ SCHEMAS={
 BATCH_OPS=["tap","swipe","type_text","launch_app","press_button","wait","observe","scroll_find"]
 SCHEMAS["batch"]=obj({"steps":{"type":"array","minItems":1,"maxItems":20,"items":{"oneOf":[obj({"op":{"type":"string","const":op},"args":SCHEMAS[op]},("op","args")) for op in BATCH_OPS]}}},("steps",))
 SCHEMAS["ready"]["examples"]=[{"recover":True,"screenshot":False}]
-SCHEMAS["screen"]=obj({"action":string("Default open displays the live iPhone sidebar. Pause before password/Face ID takeover; resume only after the user confirms completion.",enum=["open","pause","resume"])})
+SCHEMAS["screen"]=obj({"action":string("Default open displays the live iPhone / iPad sidebar. Pause before password/Face ID takeover; resume only after the user confirms completion.",enum=["open","pause","resume"])})
 SCHEMAS["screen_frame"]=obj({"after_seq":num(0,9007199254740991,"integer"),"last_event_id":num(0,9007199254740991,"integer")})
 SCHEMAS["screen_action"]=obj({
  "action":string("Preview controls: refresh, home, screenshot, refresh viewport geometry, or a user pointer tap/drag in device points.",enum=["refresh","home","screenshot","tap","drag","viewport"]),
@@ -122,7 +122,7 @@ DESCRIPTIONS={
 DESCRIPTIONS["apps"]="Resolve a real bundle ID by installed-device inventory, bundled verified aliases, or Apple's Search API. Query app name before launch instead of guessing. Store metadata does not prove installation; check installed_verified and publisher/country."
 READS={"doctor","observe","find","wait","metrics","apps"}
 READS.update(("screen","screen_frame"))
-DESCRIPTIONS["screen"]="Open or reuse the live iPhone screen in the Codex side panel. No phone actions or UI controls. Pause the preview before password/Face ID user takeover; resume after explicit completion. READY also opens or reuses this view by default."
+DESCRIPTIONS["screen"]="Open or reuse the live iPhone / iPad screen in the Codex side panel. No phone actions or UI controls. Pause the preview before password/Face ID user takeover; resume after explicit completion. READY also opens or reuses this view by default."
 DESCRIPTIONS["screen_frame"]="App-only cached live preview and action cursor events. Never reads XML, starts sessions or occupies the phone operation lock."
 DESCRIPTIONS["screen_action"]="App-only toolbar of the live preview, pressed by the user: refresh the preview stream, send the iPhone Home, or copy a screenshot to the Mac clipboard. Refused while the preview is paused for authentication."
 
@@ -179,7 +179,7 @@ for tool in TOOLS:
     if tool["name"] in ("pua_ready","pua_screen"):
         tool["_meta"]={"ui":{"resourceUri":SCREEN_URI}}
     if tool["name"]=="pua_screen":
-        tool.update(title="手机屏幕")
+        tool.update(title="设备屏幕")
         tool["_meta"]["openai/ui"]={"entrypoints":[{"type":"thread"}]}
         tool["annotations"].update(readOnlyHint=False,destructiveHint=False,idempotentHint=True)
     if tool["name"][len("pua_"):] in APP_TOOLS:tool["_meta"]={"ui":{"visibility":["app"]}}
@@ -682,7 +682,7 @@ INSTRUCTIONS=(
  "If READY fails with pua_unreachable/not_ready, inspect pua_setup(action=status) rather than end the task: reuse an active start/recovery job, or start once from the existing config/build only if the service is confirmed stopped and startup is permitted; poll that job until service.ready=true, then READY again. Connection failure or service.ready=false alone does not prove the service is stopped. Missing config/source/build uses the setup skill. "
  "pua_timeout is not proof of disconnection: wait on the host for recovery.retry_after_seconds, then take one fresh screenshot observation, or retry READY when READY failed. Do not use pua_wait as a transport wait or immediately repeat the slow query. Bound delayed attempts by recovery.max_wait_retries; persistent timeouts use setup(status) diagnostically, not blind restart. action_uncertain retains transport_error to distinguish timeout from connection failure; never replay an uncertain action. pua_transport_error is unclassified, not proof of disconnect. "
  "recover=true is runtime recovery, not cold startup; for state=recovering follow its setup job until the service is ready, then READY again. Honor explicit diagnostic/no-start/no-restart instructions. "
- "The live iPhone screen opens or reuses the same side panel with READY; setup/recovery and preview pause/resume keep the existing panel. Use pua_screen to reopen a closed panel, not to refresh an already open one. Opening it does not prove readiness or require an extra user confirmation, and widget frames never substitute for a model observation or final verification. "
+ "The live iPhone / iPad screen opens or reuses the same side panel with READY; setup/recovery and preview pause/resume keep the existing panel. Use pua_screen to reopen a closed panel, not to refresh an already open one. Opening it does not prove readiness or require an extra user confirmation, and widget frames never substitute for a model observation or final verification. "
  "Results are one compact JSON text. Tree nodes give type without the XCUIElementType prefix and rect=[x,y,width,height] in device points; an omitted name equals label, an omitted value repeats the text, omitted enabled/visible/in_viewport are true. A listed node is not proven hittable: fixed headers and overlays can cover it. "
  "A screenshot arrives as an image in the same result; through functions.exec forward each image block with image(block) and text blocks with text(block.text), never text(the whole result) or base64. If image forwarding is unavailable, use view_image on image.path or error.observation.image.path. It is scaled for reading: image pixels x image.pixel_to_point [x,y] = device points. Standalone observation uses mode, mutation output uses observe. "
  "Selectors copy label/name/value/type from fresh nodes; use label_contains for long or changing labels. Matches nested at one place, or with only one on screen, resolve by themselves. "
@@ -748,7 +748,7 @@ def serve(runtime):
                 elif method=="ping":result={}
                 elif method=="tools/list":result={"tools":TOOLS}
                 elif method=="resources/list":
-                    result={"resources":[{"uri":SCREEN_URI,"name":"iPhone Use Screen","title":"手机屏幕","mimeType":"text/html;profile=mcp-app","_meta":SCREEN_META}]}
+                    result={"resources":[{"uri":SCREEN_URI,"name":"iPad Use Screen","title":"设备屏幕","mimeType":"text/html;profile=mcp-app","_meta":SCREEN_META}]}
                 elif method=="resources/read":
                     if params.get("uri")!=SCREEN_URI:raise WDAError("invalid_argument","Unknown screen resource URI.")
                     html=(Path(__file__).resolve().parents[1]/"assets/phone-screen.html").read_text()
