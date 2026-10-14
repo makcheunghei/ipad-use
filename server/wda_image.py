@@ -12,6 +12,7 @@ import subprocess
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 # Common vision limits: the short side is kept at 768 px and the long side at 1568 px.
+# Large iPad screens (e.g. iPad Pro 13" 2064x2752) are bounded by the short side: 768x1024.
 MAX_SHORT_SIDE = 768
 MAX_LONG_SIDE = 1568
 JPEG_QUALITY = 80

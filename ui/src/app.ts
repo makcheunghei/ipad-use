@@ -29,7 +29,7 @@ type Preview = {
   device?: { model?: string } | null;
 };
 type LiveState = 'connecting' | 'live' | 'paused' | 'offline';
-type DeviceAppearance = 'plain' | 'rounded' | 'dynamic-island';
+type DeviceAppearance = 'plain' | 'ipad-pro';
 type EmptyState = 'connecting' | 'offline' | 'locked' | 'authentication' | 'paused' | 'unavailable';
 type ToolName = 'refresh' | 'home' | 'screenshot';
 type CursorEffect = { node: HTMLElement; animation?: Animation; timer?: ReturnType<typeof setTimeout> };
@@ -51,7 +51,7 @@ const tools: Record<ToolName, HTMLButtonElement> = {
   screenshot: document.getElementById('tool-screenshot') as HTMLButtonElement,
 };
 const app = new App(
-  { name: 'iPhone Use Screen', version: '0.3.12' },
+  { name: 'iPad Use Screen', version: '0.3.12' },
   { availableDisplayModes: ['fullscreen'] },
   { autoResize: false },
 );
@@ -82,43 +82,30 @@ const REQUEST_TIMEOUT = 3000;
 const ACTION_TIMEOUT = 12000;
 const LIVE_TEXT: Record<LiveState, string> = { connecting: '连接中', live: 'Live', paused: '已暂停', offline: '未连接' };
 const EMPTY_TEXT: Record<EmptyState, string> = {
-  connecting: '正在连接', offline: '未连接', locked: '请在手机上接管操作',
-  authentication: '请在手机上接管操作', paused: '请在手机上接管操作', unavailable: '画面暂不可用',
+  connecting: '正在连接', offline: '未连接', locked: '请在 iPad 上接管操作',
+  authentication: '请在 iPad 上接管操作', paused: '请在 iPad 上接管操作', unavailable: '画面暂不可用',
 };
 const DONE: Record<ToolName, string> = { refresh: '已刷新连接', home: '已回到主屏幕', screenshot: '截图已复制到剪贴板' };
 const FAILED: Record<string, string> = {
-  device_busy: '手机正在执行操作，请稍后再试',
+  device_busy: 'iPad 正在执行操作，请稍后再试',
   preview_paused: '认证接管期间已暂停',
   clipboard_unavailable: '截图未能写入剪贴板',
-  pua_unreachable: '未连接到手机',
-  phone_locked: '请先解锁手机',
+  pua_unreachable: '未连接到 iPad',
+  phone_locked: '请先解锁 iPad',
   stale_viewport: '屏幕方向已变化，请等待新画面',
 };
 
-// Use confirmed model names from USB discovery, never a generation threshold:
-// standard iPhone 14, the e models and every SE have different screen designs.
-// https://support.apple.com/en-us/108044
-const ISLAND_MODELS = new Set([
-  'iphone 14 pro', 'iphone 14 pro max',
-  'iphone 15', 'iphone 15 plus', 'iphone 15 pro', 'iphone 15 pro max',
-  'iphone 16', 'iphone 16 plus', 'iphone 16 pro', 'iphone 16 pro max',
-  'iphone 17', 'iphone 17 pro', 'iphone 17 pro max', 'iphone air',
-  'iphone 18 pro', 'iphone 18 pro max',
-]);
-const ROUNDED_MODELS = new Set([
-  'iphone x', 'iphone xr', 'iphone xs', 'iphone xs max',
-  'iphone 11', 'iphone 11 pro', 'iphone 11 pro max',
-  'iphone 12', 'iphone 12 mini', 'iphone 12 pro', 'iphone 12 pro max',
-  'iphone 13', 'iphone 13 mini', 'iphone 13 pro', 'iphone 13 pro max',
-  'iphone 14', 'iphone 14 plus', 'iphone 16e', 'iphone 17e',
-]);
-
+// Only confirmed iPad Pro names (Face ID, no Home button) get the thin-bezel frame.
+// Home-button iPads, other devices and unknown models keep an unclipped screen.
+// See docs/ipad-frame-spec.md for the frame tokens.
 function appearanceForModel(value: string): DeviceAppearance {
   const name = value.trim().replace(/\s+/g, ' ').toLowerCase();
-  if (ISLAND_MODELS.has(name)) return 'dynamic-island';
-  if (ROUNDED_MODELS.has(name)) return 'rounded';
-  // Older phones, SE, other devices and unknown models get an unclipped screen.
-  return 'plain';
+  return /^ipad pro\b/.test(name) ? 'ipad-pro' : 'plain';
+}
+
+// 13-inch iPad Pro uses 2064x2752; everything else falls back to the 11-inch 1668x2420 tokens.
+function sizeClassForModel(value: string): '11' | '13' {
+  return /\b13(?:[- ]?inch|"|\b)/i.test(value) ? '13' : '11';
 }
 
 const validSize = (value: unknown): value is Size => {
@@ -240,12 +227,13 @@ function glowDots(step: number, phase: number) {
 }
 
 function fitFrame() {
-  const size = dimensions ?? viewport ?? { width: 440, height: 956 };
+  const size = dimensions ?? viewport ?? { width: 1668, height: 2420 };
   // The stage is what remains between the status pill and the toolbar.
   const width = stage.clientWidth;
   const height = stage.clientHeight;
   const shortSide = Math.min(size.width, size.height);
-  const bezel = shortSide * .024;
+  // Uniform thin bezel: about 2.2% of the short edge (--bezel in the spec).
+  const bezel = shortSide * .022;
   const inset = deviceAppearance === 'plain' ? 0 : bezel;
   const outerWidth = size.width + 2 * inset;
   const outerHeight = size.height + 2 * inset;
@@ -253,7 +241,8 @@ function fitFrame() {
   device.style.width = `${outerWidth * scale}px`;
   device.style.height = `${outerHeight * scale}px`;
   device.style.setProperty('--bezel', `${inset * scale}px`);
-  const radius = deviceAppearance === 'plain' ? 0 : shortSide * .12 * scale;
+  // Concentric corners: --screen-radius = --frame-radius - --bezel (frame radius is 7.5% of the short edge).
+  const radius = deviceAppearance === 'plain' ? 0 : (shortSide * .075 - inset) * scale;
   device.style.setProperty('--screen-radius', `${radius}px`);
   const band = bezel * scale * 3.8;
   for (const [phase, bridge] of [.12, .32, .62].entries()) {
@@ -334,9 +323,10 @@ function consume(value: unknown) {
   if (typeof preview.service_ready === 'boolean') serviceUnavailable = !preview.service_ready;
   if (typeof preview.stream_id === 'string' && preview.stream_id !== streamId) {
     streamId = preview.stream_id;
-    // A replacement stream may belong to another phone; wait for its model.
+    // A replacement stream may belong to another iPad; wait for its model.
     nextAppearance = 'plain';
-    model.textContent = 'iPhone';
+    model.textContent = 'iPad';
+    device.dataset.model = '11';
     // Sequence numbers restart with the server, but keep the last pixels until
     // its replacement is ready.
     frameSeq = 0;
@@ -347,6 +337,7 @@ function consume(value: unknown) {
   if (typeof preview.device?.model === 'string' && preview.device.model.trim()) {
     model.textContent = preview.device.model;
     nextAppearance = appearanceForModel(preview.device.model);
+    device.dataset.model = sizeClassForModel(preview.device.model);
   }
   if (nextAppearance !== deviceAppearance) {
     deviceAppearance = nextAppearance;
@@ -371,8 +362,8 @@ function consume(value: unknown) {
     setLive('paused');
     liveText.textContent = preview.pause_reason === 'device_locked' ? '等待解锁' : LIVE_TEXT.paused;
     liveText.title = preview.pause_reason === 'device_locked'
-      ? '解锁 iPhone 后继续任务，或点击刷新恢复预览'
-      : '预览已暂停；完成手机认证后继续任务或点击刷新恢复画面';
+      ? '解锁 iPad 后继续任务，或点击刷新恢复预览'
+      : '预览已暂停；完成 iPad 认证后继续任务或点击刷新恢复画面';
     showEmpty(preview.pause_reason === 'device_locked' ? 'locked'
       : preview.pause_reason === 'authentication' ? 'authentication' : 'paused');
     return;
@@ -495,7 +486,7 @@ async function act(name: ToolName) {
     } else {
       // A refresh answers with the new stream identity; take the next frame at once.
       if (name === 'refresh') consume(data);
-      notify(name === 'refresh' && data?.service_ready === false ? '未连接到手机，请确认连接后重试' : DONE[name], name === 'refresh' && data?.service_ready === false);
+      notify(name === 'refresh' && data?.service_ready === false ? '未连接到 iPad，请确认连接后重试' : DONE[name], name === 'refresh' && data?.service_ready === false);
       if (timer) clearTimeout(timer);
       timer = undefined;
       schedule(0);
@@ -589,9 +580,9 @@ async function sendPointer(args: Record<string, string | number>) {
   try {
     const result = await app.callServerTool({ name: 'pua_screen_action', arguments: args }, { timeout: ACTION_TIMEOUT });
     const data = result.structuredContent as { error?: { code?: string; uncertain?: boolean } } | undefined;
-    if (result.isError || data?.error) notify(data?.error?.uncertain ? '操作结果不确定，请查看手机后再操作' : FAILED[data?.error?.code ?? ''] ?? '操作未完成，请查看手机状态', true);
+    if (result.isError || data?.error) notify(data?.error?.uncertain ? '操作结果不确定，请查看 iPad 后再操作' : FAILED[data?.error?.code ?? ''] ?? '操作未完成，请查看 iPad 状态', true);
   } catch {
-    notify('操作结果不确定，请查看手机后再操作', true);
+    notify('操作结果不确定，请查看 iPad 后再操作', true);
   } finally {
     acting = false;
     freshUntil = -Infinity; // Require another fresh stream heartbeat before the next gesture.
@@ -642,7 +633,7 @@ screen.addEventListener('wheel', wheel, { passive: false });
 const pointerHandlers = { pointerdown: pointerDown, pointermove: pointerMove, pointerup: pointerUp,
   pointercancel: cancelPointer, lostpointercapture: cancelPointer };
 for (const [name, handler] of Object.entries(pointerHandlers)) screen.addEventListener(name, handler as EventListener);
-screen.title = '点击操作手机；拖动或触控板双指滑动来滚动、翻页';
+screen.title = '点击操作 iPad；拖动或触控板双指滑动来滚动、翻页';
 
 const toolHandlers = (Object.keys(tools) as ToolName[]).map(name => {
   const handler = () => { void act(name); };

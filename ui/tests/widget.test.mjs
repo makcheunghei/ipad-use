@@ -281,7 +281,7 @@ test('paused overlays the retained screen, errors back off silently, teardown cl
   h.app.ontoolresult({ structuredContent: preview({ paused: true }) });
   assert.equal(h.elements.screen.hidden, false);
   assert.equal(h.elements.image.hidden, false);
-  assert.equal(h.elements['empty-state-text'].textContent, '请在手机上接管操作');
+  assert.equal(h.elements['empty-state-text'].textContent, '请在 iPad 上接管操作');
   assert.equal(h.elements.image.src, 'data:image/png;base64,test-image-only');
   assert.equal(h.elements['empty-state'].hidden, false);
   assert.equal(h.elements.app.dataset.busy, 'false');
@@ -461,10 +461,10 @@ test('empty screen explains connecting, offline, locked, authentication and paus
   assert.equal(h.elements['empty-state-text'].textContent, '正在连接');
   for (const [fields, state, label] of [
     [{ frame_available: false, service_ready: false }, 'offline', '未连接'],
-    [{ paused: true, pause_reason: 'device_locked' }, 'locked', '请在手机上接管操作'],
-    [{ paused: true, pause_reason: 'authentication' }, 'authentication', '请在手机上接管操作'],
-    [{ paused: true, pause_reason: 'unknown' }, 'paused', '请在手机上接管操作'],
-    [{ paused: true }, 'paused', '请在手机上接管操作'],
+    [{ paused: true, pause_reason: 'device_locked' }, 'locked', '请在 iPad 上接管操作'],
+    [{ paused: true, pause_reason: 'authentication' }, 'authentication', '请在 iPad 上接管操作'],
+    [{ paused: true, pause_reason: 'unknown' }, 'paused', '请在 iPad 上接管操作'],
+    [{ paused: true }, 'paused', '请在 iPad 上接管操作'],
   ]) {
     h.app.ontoolresult({ structuredContent: preview(fields) });
     assert.equal(h.elements['empty-state'].dataset.state, state);
@@ -488,7 +488,7 @@ test('failed reconnect preserves the handoff prompt and keeps phone controls dis
   release({ isError: true, structuredContent: { error: { code: 'pua_unreachable' } } });
   await flush();
   assert.equal(h.elements['empty-state'].dataset.state, 'authentication');
-  assert.equal(h.elements['empty-state-text'].textContent, '请在手机上接管操作');
+  assert.equal(h.elements['empty-state-text'].textContent, '请在 iPad 上接管操作');
   assert.equal(h.elements['tool-home'].disabled, true);
   assert.equal(h.elements['tool-screenshot'].disabled, true);
 });
@@ -573,7 +573,7 @@ test('each handoff reason retains the page geometry and ignores incoming frames 
       assert.equal(h.elements.device.dataset.orientation, 'landscape', pause_reason);
       assert.deepEqual([h.elements.device.style.width, h.elements.device.style.height], size);
       assert.equal(h.elements['empty-state'].hidden, false, pause_reason);
-      assert.equal(h.elements['empty-state-text'].textContent, '请在手机上接管操作', pause_reason);
+      assert.equal(h.elements['empty-state-text'].textContent, '请在 iPad 上接管操作', pause_reason);
       assert.equal(h.elements.cursor.hidden, true, pause_reason);
       assert.equal(h.elements['tool-home'].disabled, true, pause_reason);
       assert.equal(h.elements['tool-screenshot'].disabled, true, pause_reason);
@@ -604,38 +604,28 @@ test('resuming removes the overlay but frozen pixels cannot send input before a 
   assert.equal(h.calls.filter(c => c.name === 'pua_screen_action').length, 1);
 });
 
-test('only confirmed Dynamic Island models show the island', async () => {
+test('only confirmed iPad Pro models get the thin-bezel frame with concentric corners', async () => {
   const h = await harness();
-  for (const model of ['iPhone 14 Pro', 'iPhone 14 Pro Max', 'iPhone 15', 'iPhone 15 Plus', 'iPhone 15 Pro', 'iPhone 15 Pro Max',
-    'iPhone 16', 'iPhone 16 Plus', 'iPhone 16 Pro', 'iPhone 16 Pro Max', 'iPhone 17', 'iPhone 17 Pro', 'iPhone 17 Pro Max',
-    'iPhone Air', 'iPhone 18 Pro', 'iPhone 18 Pro Max', '  IPHONE  15 PRO  ']) {
+  for (const [model, size] of [['iPad Pro 11-inch (M4)', '11'], ['iPad Pro 13-inch (M4)', '13'], ['iPad Pro (11-inch) (4th generation)', '11'],
+    ['iPad Pro', '11'], ['  IPAD  PRO  13-INCH (M4) ', '13']]) {
     h.app.ontoolresult({ structuredContent: preview({ device: { model } }) });
-    assert.equal(h.elements.device.dataset.appearance, 'dynamic-island', model);
-    assert.ok(parseFloat(h.elements.device.style['--bezel']) > 0, model);
-    assert.ok(parseFloat(h.elements.device.style['--screen-radius']) > 0, model);
+    assert.equal(h.elements.device.dataset.appearance, 'ipad-pro', model);
+    assert.equal(h.elements.device.dataset.model, size, model);
+    const bezel = parseFloat(h.elements.device.style['--bezel']);
+    const radius = parseFloat(h.elements.device.style['--screen-radius']);
+    assert.ok(bezel > 0 && radius > bezel, model);
   }
 });
 
-test('notch models keep the rounded frame without a Dynamic Island', async () => {
-  const h = await harness();
-  for (const model of ['iPhone X', 'iPhone XR', 'iPhone XS', 'iPhone XS Max', 'iPhone 11', 'iPhone 11 Pro', 'iPhone 11 Pro Max',
-    'iPhone 12', 'iPhone 12 mini', 'iPhone 12 Pro', 'iPhone 12 Pro Max', 'iPhone 13', 'iPhone 13 mini', 'iPhone 13 Pro',
-    'iPhone 13 Pro Max', 'iPhone 14', 'iPhone 14 Plus', 'iPhone 16e', 'iPhone 17e']) {
-    h.app.ontoolresult({ structuredContent: preview({ device: { model } }) });
-    assert.equal(h.elements.device.dataset.appearance, 'rounded', model);
-    assert.ok(parseFloat(h.elements.device.style['--bezel']) > 0, model);
-    assert.ok(parseFloat(h.elements.device.style['--screen-radius']) > 0, model);
-  }
-});
-
-test('older phones, every SE and unrecognized models use a rectangular screen with no chassis', async () => {
+test('Home-button iPads, phones and unrecognized models use a rectangular screen with no chassis', async () => {
   const h = await harness();
   assert.equal(h.elements.device.dataset.appearance, 'plain');
   for (const model of ['iPhone', 'iPhone 3GS', 'iPhone 4S', 'iPhone 5', 'iPhone 5c', 'iPhone 5s', 'iPhone 6', 'iPhone 6 Plus',
     'iPhone 6s', 'iPhone 6s Plus', 'iPhone 7', 'iPhone 7 Plus', 'iPhone 8', 'iPhone 8 Plus', 'iPhone SE',
-    'iPhone SE (2nd generation)', 'iPhone SE (3rd generation)', 'iPad Pro', 'iPhone 99 Pro', 'iPhone17,3']) {
-    // Switch from a known island phone to ensure fallback also removes its decoration.
-    h.app.ontoolresult({ structuredContent: preview({ device: { model: 'iPhone 15 Pro' } }) });
+    'iPhone SE (2nd generation)', 'iPhone SE (3rd generation)', 'iPad', 'iPad (9th generation)', 'iPad Air', 'iPad mini',
+    'iPhone 15 Pro', 'iPad16,3']) {
+    // Switch from a known iPad Pro to ensure fallback also removes its decoration.
+    h.app.ontoolresult({ structuredContent: preview({ device: { model: 'iPad Pro 11-inch (M4)' } }) });
     h.app.ontoolresult({ structuredContent: preview({ device: { model } }) });
     assert.equal(h.elements.device.dataset.appearance, 'plain', model);
     assert.equal(h.elements.device.style['--bezel'], '0px', model);
@@ -669,25 +659,26 @@ test('late model metadata refits the current frame, survives pauses and resets f
   h.app.ontoolresult({ structuredContent: preview({ stream_id: 'first', frame: frame(1) }) });
   const source = h.elements.image.src;
   const initialLayouts = h.layoutReads;
-  h.app.ontoolresult({ structuredContent: preview({ device: { model: 'iPhone 15 Pro' } }) });
-  assert.equal(h.elements.device.dataset.appearance, 'dynamic-island');
+  h.app.ontoolresult({ structuredContent: preview({ device: { model: 'iPad Pro 11-inch (M4)' } }) });
+  assert.equal(h.elements.device.dataset.appearance, 'ipad-pro');
   assert.equal(h.layoutReads, initialLayouts + 1);
   assert.equal(h.elements.image.src, source);
-  for (const device of [{ model: 'iPhone 15 Pro' }, null, undefined]) {
+  for (const device of [{ model: 'iPad Pro 11-inch (M4)' }, null, undefined]) {
     h.app.ontoolresult({ structuredContent: preview({ device }) });
-    assert.equal(h.elements.device.dataset.appearance, 'dynamic-island');
+    assert.equal(h.elements.device.dataset.appearance, 'ipad-pro');
   }
   assert.equal(h.layoutReads, initialLayouts + 1);
   h.app.ontoolresult({ structuredContent: preview({ paused: true }) });
-  assert.equal(h.elements.device.dataset.appearance, 'dynamic-island');
+  assert.equal(h.elements.device.dataset.appearance, 'ipad-pro');
   h.app.ontoolresult({ structuredContent: preview({ stream_id: 'second', frame: frame(1), device: null }) });
-  assert.equal(h.elements.model.textContent, 'iPhone');
+  assert.equal(h.elements.model.textContent, 'iPad');
   assert.equal(h.elements.device.dataset.appearance, 'plain');
-  h.app.ontoolresult({ structuredContent: preview({ device: { model: 'iPhone 14' } }) });
-  assert.equal(h.elements.device.dataset.appearance, 'rounded');
-  h.app.ontoolresult({ structuredContent: preview({ stream_id: 'third', device: { model: 'iPhone 15' } }) });
-  assert.equal(h.elements.model.textContent, 'iPhone 15');
-  assert.equal(h.elements.device.dataset.appearance, 'dynamic-island');
+  h.app.ontoolresult({ structuredContent: preview({ device: { model: 'iPad Air' } }) });
+  assert.equal(h.elements.device.dataset.appearance, 'plain');
+  h.app.ontoolresult({ structuredContent: preview({ stream_id: 'third', device: { model: 'iPad Pro 13-inch (M4)' } }) });
+  assert.equal(h.elements.model.textContent, 'iPad Pro 13-inch (M4)');
+  assert.equal(h.elements.device.dataset.appearance, 'ipad-pro');
+  assert.equal(h.elements.device.dataset.model, '13');
 });
 
 test('status pill names the phone model and follows the stream state', async () => {
@@ -751,7 +742,7 @@ test('toolbar failures name the reason without changing the preview', async () =
     ? (replies.length ? Promise.resolve(replies.shift()) : Promise.reject(new Error('lost')))
     : Promise.resolve({ structuredContent: preview() }) });
   h.app.ontoolresult({ structuredContent: preview({ frame: frame(4), frame_available: true }) });
-  for (const [expected, tone] of [['手机正在执行操作，请稍后再试', 'error'], ['操作未完成，请重试', 'error'],
+  for (const [expected, tone] of [['iPad 正在执行操作，请稍后再试', 'error'], ['操作未完成，请重试', 'error'],
     ['截图已复制到剪贴板', 'ok'], ['操作未完成，请重试', 'error']]) {
     h.elements['tool-screenshot'].click();
     await flush();
@@ -783,7 +774,7 @@ test('refresh reports a real disconnected service instead of a success toast', a
   const h = await harness({ reply: () => Promise.resolve({ structuredContent: { ok: true, service_ready: false, ...preview({ frame_available: false }) } }) });
   h.elements['tool-refresh'].click();
   await flush();
-  assert.match(h.elements.toast.textContent, /未连接到手机/);
+  assert.match(h.elements.toast.textContent, /未连接到 iPad/);
   assert.equal(h.elements.toast.dataset.tone, 'error');
   assert.equal(h.elements['empty-state-text'].textContent, '未连接');
   assert.equal(h.elements.device.hidden, false);
