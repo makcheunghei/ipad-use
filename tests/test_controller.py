@@ -488,7 +488,7 @@ class ControllerTests(unittest.TestCase):
         self.assertFalse(error.details["changed"])
         self.assertEqual(error.details["attempts"], 1)
         self.assertEqual(error.details["reasons"], ["viewport_changed"])
-        self.assertEqual(error.details["observation"]["viewport"], {**self.client.size, "units": "iPhone points"})
+        self.assertEqual(error.details["observation"]["viewport"], {**self.client.size, "units": "device points"})
         self.assertEqual([path for _, path, _ in self.client.actions()], ["/wda/dragfromtoforduration"])
 
     def test_no_progress_stops_before_unseen_fallback_can_open_a_modal(self):
@@ -678,7 +678,7 @@ class ControllerTests(unittest.TestCase):
                 error = self.assert_code(code, lambda: self.phone.tap(selector={"label": "Target"}, observe="none"))
                 self.assertFalse(error.details["action_executed"])
                 self.assertEqual(error.details["target_rect"], self.client.elements[0]["rect"])
-                self.assertEqual(error.details["viewport"], {**self.client.size, "units": "iPhone points"})
+                self.assertEqual(error.details["viewport"], {**self.client.size, "units": "device points"})
                 # The failed selector step hands back the screen: the next call acts by coordinates.
                 recovery = error.details["recovery"]
                 self.assertEqual(recovery["use"], "coordinates")

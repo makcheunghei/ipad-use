@@ -43,11 +43,11 @@ App 实际要求密码、PIN、验证码、Face ID / Touch ID，或手机需要�
 
 截图先判断当前页面、首尾行是否移动、末尾控件 / 空白、弹窗 / 固定表头和实际可滚动区域。已见目标或任务范围边界就停止寻找；画面不再移动先处理边界或遮挡，再决定是否需要另一区域或方向。`direction` 始终是手指移动方向，up 通常查看下面的内容。用户侧栏的实时预览不替代模型实际查看工具图片。
 
-- 点击：`tap_point`、candidates 的 `tap` 是元素位置（iPhone 点），不证明它可点击。优惠券、广告、菜单或登录浮层可能盖住后台控件；先从截图找到实际可见的关闭 / 取消按钮，处理遮挡，再点目标。
+- 点击：`tap_point`、candidates 的 `tap` 是元素位置（设备点），不证明它可点击。优惠券、广告、菜单或登录浮层可能盖住后台控件；先从截图找到实际可见的关闭 / 取消按钮，处理遮挡，再点目标。
 - 输入：先点截图中实际可见的输入框，再调用不带 selector 的 `pua_type_text(text=...)`。`no_focused_field` 表示没有输入；上一个点击可能被浮层拦截或落在错误位置，不能原样重复那组坐标和输入。按当前截图重新选点，下一步需要信息时让动作返回截图，以便判断页面与焦点。
 - 目标在屏幕外：先向目标滑动，再按随后截图点击。等待标签或滚动查找失败也按真实画面继续，不循环相同标签。
 
-截图像素点 `(px, py)` 换算为 `x=px*image.pixel_to_point[0]`、`y=py*image.pixel_to_point[1]` 后传给 `pua_tap`。x/y 接受 iPhone 点，不能直接传截图像素或 Mac widget 坐标。
+截图像素点 `(px, py)` 换算为 `x=px*image.pixel_to_point[0]`、`y=py*image.pixel_to_point[1]` 后传给 `pua_tap`。x/y 接受设备点，不能直接传截图像素或 Mac widget 坐标。
 
 通过 `functions.exec` 调工具时必须把图片真正转发给模型，不能 `text(result)` 输出整份含 base64 的结果：
 
@@ -70,7 +70,7 @@ for (const block of result.content ?? []) {
 已知并核验过的 bundle ID 可直接 launch；需要离线查常用 App 时用 `pua_apps(source="catalog", query=...)` 或 [常用 App 目录](references/apps.md)。未知或同名 App 用 `source="auto"` 查本机候选，仍无结果才查 Apple。不要连续猜 ID；招商银行主应用为 `com.cmbchina.MPBBank`。商店或目录记录不证明本机安装，`installed_verified=true` 才是安装证据。启动后准备下一步的观察会同时显示实际前台，不额外增加默认前台验收。
 
 - `pua_launch_app`：激活一次后继续；默认 `verify=false, observe="none"`。下一步需要新页面信息时设置 observe；关键入口确需证明目标 App / 页面时显式 `verify=true` 或传 `expect`。
-- `pua_tap`：优先使用 `selector`，从当前节点照抄 label / name / value / type，可加 enabled；标签很长或含会变化的时间、数字时用 `label_contains`。predicate 单独使用，保留实际标签里的换行、引号和反斜线；rect、visible、in_viewport 不是 selector 字段。同名匹配叠在同一位置（如 Cell 与其中的文字），或只有一个在屏幕内时，工具自行取该目标并在结果的 `target` 中说明；多个分开的匹配返回 `ambiguous_target` 和带 `index`、类型、位置、`tap` 坐标、`hittable` 的 candidates，按其中目标的 `tap` 坐标点击（或用同一 selector 加 `index`），不随意选第一项，也不必为此再观察。selector 失败或语义不足时用 iPhone 点坐标 x/y；observation_id 可选，提供时必须来自同一 Runtime，并仅核对 App / 视口上下文。已有页面信息足以定位时不额外读树或截图；切页、用户接管或旋转后按当前信息重新定位。
+- `pua_tap`：优先使用 `selector`，从当前节点照抄 label / name / value / type，可加 enabled；标签很长或含会变化的时间、数字时用 `label_contains`。predicate 单独使用，保留实际标签里的换行、引号和反斜线；rect、visible、in_viewport 不是 selector 字段。同名匹配叠在同一位置（如 Cell 与其中的文字），或只有一个在屏幕内时，工具自行取该目标并在结果的 `target` 中说明；多个分开的匹配返回 `ambiguous_target` 和带 `index`、类型、位置、`tap` 坐标、`hittable` 的 candidates，按其中目标的 `tap` 坐标点击（或用同一 selector 加 `index`），不随意选第一项，也不必为此再观察。selector 失败或语义不足时用 设备点坐标 x/y；observation_id 可选，提供时必须来自同一 Runtime，并仅核对 App / 视口上下文。已有页面信息足以定位时不额外读树或截图；切页、用户接管或旋转后按当前信息重新定位。
 - `pua_press_button`：仅用 schema 中支持的按钮。Home 使用专用 homescreen 路径，默认 `verify=false`，正常返回即可准备下一步；明确需要主屏状态时显式 `verify=true`。MCP 绑定不可用时按 [工具故障与代码调用](references/tool-fallback.md) 继续同一已授权动作。
 - `pua_swipe`：方向为手指移动方向，up 通常浏览后续内容。默认 `verify=false, observe="none"`，只执行一次手势，不读取 XML 验进展。可按已知列表传 region，不强制 observation_id 或 tree。下一步读取列表内容时顺带判断是否移动；明确没动先看截图中的入口、边界、浮层或区域。显式 `verify=true` 只检查一次手势的几何变化；无进展或上下文变化即附截图交回模型，即使传入旧参数 `max_attempts=2` 也不自动换手势重试。
 - `pua_wait`：确实依赖控件出现时使用有界 timeout；无需固定长 sleep，也不为所有导航补一个 wait。`pua_scroll_find`：目标已可点击就直接返回；遮挡或歧义立刻附截图停止。一次调用最多滑一次，滚动后仍找不到可点击目标时先查看返回截图，再判断是否继续滑；`max_swipes=0` 只查找，正数即使大于 1 也不连续盲滑。找到后继续下一步，不再次重复查找同一结果。

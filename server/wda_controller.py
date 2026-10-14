@@ -157,6 +157,7 @@ class PhoneController:
         self._screen_viewport=None
         self._screen_targets={}
         self._viewport_cache=None
+        self._rotation=None
         self._source_app=None
         self._deadline=None
         self.pending_input=None
@@ -209,7 +210,7 @@ class PhoneController:
             self._screen_viewport={"width":v["width"],"height":v["height"]}
             try:self.screen.set_viewport(self._screen_viewport)
             except Exception:pass
-        result={"width":v["width"],"height":v["height"],"units":"iPhone points"}
+        result={"width":v["width"],"height":v["height"],"units":"device points"}
         self._viewport_cache=(time.monotonic(),result)
         return dict(result)
 
@@ -223,6 +224,40 @@ class PhoneController:
             return self.viewport()
         self._viewport_cache=(time.monotonic(),cached[1])
         return dict(cached[1])
+
+    def portrait_frame_rotation(self,root,viewport):
+        """Detect a landscape viewport whose source frames are still portrait.
+
+        Seen on iPad (WDA 16.x): /window/size is landscape (1376x1032) while the
+        source root and element frames use the portrait frame (1032x1376). Returns
+        (side, portrait_width, portrait_height) or None when frames already match.
+        """
+        try:size=(float(root["width"]),float(root["height"]))
+        except (KeyError,ValueError,TypeError):return None
+        vw,vh=float(viewport["width"]),float(viewport["height"])
+        if not (vw>vh and size==(vh,vw)):
+            return None
+        try:orientation=str(self.client.session("GET","/orientation") or "")
+        except Exception:orientation=""
+        # WDA reports UIDeviceOrientationLandscapeLeft as "LANDSCAPE" and
+        # UIDeviceOrientationLandscapeRight as "UIA_DEVICE_ORIENTATION_LANDSCAPERIGHT".
+        side="right" if "RIGHT" in orientation.upper() else "left"
+        return (side,size[0],size[1])
+
+    def to_viewport_rect(self,rect,rotation=None):
+        """Map a portrait-frame rect into the landscape point space taps use."""
+        rotation=rotation or self._rotation
+        if not rotation:
+            return rect
+        side,width,height=rotation
+        x,y,w,h=rect["x"],rect["y"],rect["width"],rect["height"]
+        if side=="left":
+            # Device turned counter-clockwise (home side right): portrait top edge is on the left.
+            mapped={"x":y,"y":width-(x+w),"width":h,"height":w}
+        else:
+            # Device turned clockwise: portrait top edge is on the right.
+            mapped={"x":height-(y+h),"y":x,"width":h,"height":w}
+        return {**rect,**mapped}
 
     def active_app(self,timeout=None):
         result=self.client.request("GET", "/wda/activeAppInfo",timeout=timeout).get("value") or {}
@@ -251,6 +286,7 @@ class PhoneController:
         bundle=root.get("bundleId")
         self._source_app=bundle if isinstance(bundle,str) and bundle and not bundle.startswith("local.pid.") else None
         viewport=self.source_viewport(root)
+        self._rotation=self.portrait_frame_rotation(root,viewport)
         nodes=[]
         for element in tree.iter():
             a=element.attrib
@@ -262,6 +298,7 @@ class PhoneController:
                 continue
             if not all(math.isfinite(n) for n in rect.values()):
                 continue
+            rect=self.to_viewport_rect(rect)
             intersects=rect["width"]>0 and rect["height"]>0 and rect["x"]<viewport["width"] and rect["y"]<viewport["height"] and rect["x"]+rect["width"]>0 and rect["y"]+rect["height"]>0
             if not include_invisible and (not intersects or a.get("visible")=="false"):
                 continue
@@ -419,6 +456,9 @@ class PhoneController:
         rect=element["rect"]
         if not isinstance(rect,dict) or not all(isinstance(rect.get(key),(int,float)) and not isinstance(rect.get(key),bool) and math.isfinite(rect[key]) for key in ("x","y","width","height")):
             fail("invalid_response","PUA element rect is not numeric.")
+        if self._rotation and not element.get("_rotated"):
+            element["rect"]=rect=self.to_viewport_rect(rect)
+            element["_rotated"]=True
         return rect
 
     def element_hittable(self,element):
@@ -461,7 +501,7 @@ class PhoneController:
         else:
             tool,step="pua_tap","Inspect the attached screenshot FIRST, then tap the visible target with pua_tap x/y; a returned tap or tap_point is already in iPhone points."
         recovery={**error.details.get("recovery",{}),"use":"coordinates" if error.code in SELECTOR_FAILURES else "screenshot","visual_check_required":True,"replay_action":False,
-                  "next_step":step+" Image pixels x image.pixel_to_point give iPhone points. Inspect the image content, not its base64 text; through functions.exec forward image blocks with image(block), or open observation.image.path with view_image. If no screenshot is available, take one pua_observe(mode=screenshot) before acting. Do not try other selector spellings or read the tree again first."}
+                  "next_step":step+" Image pixels x image.pixel_to_point give device points. Inspect the image content, not its base64 text; through functions.exec forward image blocks with image(block), or open observation.image.path with view_image. If no screenshot is available, take one pua_observe(mode=screenshot) before acting. Do not try other selector spellings or read the tree again first."}
         recovery.pop("next_tool",None);recovery.pop("next_arguments",None)
         if tool:recovery["next_tool"]=tool
         if "image" not in error.details.get("observation",{}):
@@ -773,7 +813,7 @@ class PhoneController:
         if region is None:
             return {"x":viewport["width"]*.15,"y":viewport["height"]*.25,"width":viewport["width"]*.7,"height":viewport["height"]*.5}
         if not isinstance(region,dict) or set(region)!={"x","y","width","height"}:
-            fail("invalid_argument","region must have x/y/width/height in iPhone points.")
+            fail("invalid_argument","region must have x/y/width/height in device points.")
         for k,v in region.items():finite(v,k,0 if k in ("x","y") else 1)
         if region["x"]+region["width"]>viewport["width"] or region["y"]+region["height"]>viewport["height"]:
             fail("invalid_argument","Gesture region is outside viewport.")
