@@ -23,24 +23,22 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent
 #toast{position:absolute;left:50%;bottom:70px;z-index:5;max-width:calc(100% - 32px);padding:7px 12px;overflow:hidden;border-radius:999px;background:var(--toast);color:var(--toast-text);line-height:1.2;text-overflow:ellipsis;white-space:nowrap;transform:translateX(-50%);box-shadow:0 6px 20px -8px #00000059;pointer-events:none;animation:toast-in .18s ease-out}
 #toast[data-tone="error"]{background:#b42318f2;color:#fff}
 #toast[hidden]{display:none}
-#device{--bezel:0px;--screen-radius:0px;position:relative;width:min(100%,350px);aspect-ratio:460/976;flex:none;isolation:isolate;border-radius:calc(var(--screen-radius) + var(--bezel));background:linear-gradient(115deg,#c4c0b9 0%,#686662 12%,#b1ada6 24%,#555452 51%,#96938e 72%,#c9c6c0 91%,#686762 100%);box-shadow:0 0 0 .7px #252525ad,0 12px 28px -14px #00000055,0 4px 8px -4px #00000033;user-select:none;pointer-events:none}
-#device::before{content:"";position:absolute;inset:calc(var(--bezel) * .24);z-index:1;border-radius:calc(var(--screen-radius) + var(--bezel) * .76);background:#090a0c;box-shadow:0 0 0 .7px #00000099,inset 0 0 0 .7px #ffffff16;pointer-events:none}
-#screen{position:absolute;inset:var(--bezel);z-index:2;isolation:isolate;overflow:hidden;border-radius:var(--screen-radius);background:#050609;line-height:0;user-select:none}
+/* iPad Pro frame tokens — see docs/ipad-frame-spec.md. fitFrame() sets the live --bezel/--screen-radius and size. */
+#device{--ipad-aspect:1668/2420;--ipad-w:1668;--ipad-h:2420;--bezel:0px;--screen-radius:0px;--frame-radius:calc(var(--screen-radius) + var(--bezel));--frame-body:#1C1C1E;--frame-edge:rgba(255,255,255,.08);--frame-screen:#000;--camera-size:max(3px,calc(var(--bezel) * .32));position:relative;width:min(100%,560px);max-height:100%;aspect-ratio:var(--ipad-aspect);flex:none;isolation:isolate;border-radius:var(--frame-radius);background:var(--frame-body);box-shadow:inset 0 0 0 1px var(--frame-edge),0 0 0 .7px #000000b3,0 12px 28px -14px #00000055,0 4px 8px -4px #00000033;user-select:none;pointer-events:none}
+#device[data-model="13"]{--ipad-aspect:2064/2752;--ipad-w:2064;--ipad-h:2752}
+#device[data-orientation="landscape"]{--ipad-aspect:2420/1668;--ipad-w:2420;--ipad-h:1668}
+#device[data-orientation="landscape"][data-model="13"]{--ipad-aspect:2752/2064;--ipad-w:2752;--ipad-h:2064}
+#device::before{content:"";position:absolute;inset:.5px;z-index:1;border-radius:calc(var(--frame-radius) - .5px);box-shadow:inset 0 0 0 .5px var(--frame-edge);pointer-events:none}
+#screen{position:absolute;inset:var(--bezel);z-index:2;isolation:isolate;overflow:hidden;border-radius:var(--screen-radius);background:var(--frame-screen);line-height:0;user-select:none}
 #device[hidden],#screen[hidden],.gesture-cursor[hidden]{display:none}
-.side-button{position:absolute;z-index:0;width:calc(var(--bezel) * .27);left:calc(var(--bezel) * -.22);border-radius:calc(var(--bezel) * .15);background:linear-gradient(90deg,#5a5956,#b1aea7 55%,#5e5c59);box-shadow:0 0 0 .4px #35353280;pointer-events:none}
-.action-button{top:15%;height:3.7%}
-.volume-up{top:23%;height:6.4%}
-.volume-down{top:32%;height:6.4%}
-.power-button{left:auto;right:calc(var(--bezel) * -.22);top:26%;height:10.4%;background:linear-gradient(90deg,#5e5c59,#aaa7a1 45%,#5a5956)}
-.receiver{position:absolute;left:50%;top:calc(var(--bezel) * .36);z-index:3;width:15%;height:calc(var(--bezel) * .19);transform:translateX(-50%);border-radius:999px;background:#030405;box-shadow:0 .5px 0 #ffffff19;pointer-events:none}
+/* Optional subtle top button on the top edge (portrait); moves to the left end of the top edge in landscape. */
+.top-button{position:absolute;z-index:0;top:calc(var(--bezel) * -.12);right:12%;width:9%;height:calc(var(--bezel) * .14);border-radius:999px;background:#2c2c2e;pointer-events:none}
+#device[data-orientation="landscape"] .top-button{right:auto;left:6%;width:6.5%}
+/* Front camera: iPad Pro (M4) has it on the landscape long edge → top-centre in landscape, left-edge centre in portrait. */
+.camera{position:absolute;z-index:3;left:calc(var(--bezel) / 2);top:50%;width:var(--camera-size);height:var(--camera-size);transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle at 40% 35%,#2a3a55 0%,#0d1320 55%,#000 80%);box-shadow:0 0 0 .5px #ffffff10;pointer-events:none}
+#device[data-orientation="landscape"] .camera{left:50%;top:calc(var(--bezel) / 2)}
 #device[data-appearance="plain"]{border-radius:0;background:none;box-shadow:none}
-#device[data-appearance="plain"]::before,#device[data-appearance="plain"] .side-button,#device[data-appearance="plain"] .receiver{display:none}
-#device[data-orientation="landscape"] .side-button{left:auto;top:calc(var(--bezel) * -.22);height:calc(var(--bezel) * .27);background:linear-gradient(180deg,#5a5956,#b1aea7 55%,#5e5c59)}
-#device[data-orientation="landscape"] .action-button{left:15%;width:3.7%}
-#device[data-orientation="landscape"] .volume-up{left:23%;width:6.4%}
-#device[data-orientation="landscape"] .volume-down{left:32%;width:6.4%}
-#device[data-orientation="landscape"] .power-button{left:26%;right:auto;top:auto;bottom:calc(var(--bezel) * -.22);width:10.4%;background:linear-gradient(180deg,#5e5c59,#aaa7a1 45%,#5a5956)}
-#device[data-orientation="landscape"] .receiver{left:calc(var(--bezel) * .36);top:50%;width:calc(var(--bezel) * .19);height:15%;transform:translateY(-50%)}
+#device[data-appearance="plain"]::before,#device[data-appearance="plain"] .top-button,#device[data-appearance="plain"] .camera{display:none}
 #image{position:relative;z-index:1;display:block;width:100%;height:100%;object-fit:contain;user-select:none;pointer-events:none}
 #image[hidden],#empty-state[hidden]{display:none}
 #empty-state{position:absolute;inset:0;z-index:1;display:grid;place-items:center;background:radial-gradient(ellipse at 12% 0%,#ffffff08,transparent 56%),linear-gradient(145deg,#16171a,#090a0c 48%,#050609);color:#a9abb0;user-select:none}
@@ -77,10 +75,6 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent
 #app[data-operating="true"] .glow i:nth-child(2){animation:glow-b var(--glow-cycle) linear infinite}
 #app[data-operating="true"] .glow i:nth-child(3){animation:glow-c var(--glow-cycle) linear infinite}
 #app[data-page-visible="false"] .glow,#app[data-page-visible="false"] .glow i:nth-child(n),#app[data-page-visible="false"] .dot{animation-play-state:paused}
-.dynamic-island{display:none;position:absolute;z-index:3;left:50%;top:calc(var(--bezel) * 1.17);width:calc(var(--bezel) * 11.25);height:calc(var(--bezel) * 3.46);transform:translateX(-50%);border-radius:999px;background:#030405;box-shadow:0 0 0 .5px #00000099,inset 0 .5px 0 #ffffff0d;pointer-events:none}
-#device[data-appearance="dynamic-island"] .dynamic-island{display:block}
-.dynamic-island::after{content:"";position:absolute;right:calc(var(--bezel) * .66);top:50%;width:calc(var(--bezel) * 1.65);height:calc(var(--bezel) * 1.65);transform:translateY(-50%);border-radius:50%;background:radial-gradient(circle at 43% 38%,#274271 0%,#111d31 27%,#090c12 54%,#010203 73%);box-shadow:inset 0 0 0 .6px #111620;opacity:.7}
-#device[data-orientation="landscape"] .dynamic-island{left:calc(var(--bezel) * 2.9);top:50%;transform:translate(-50%,-50%) rotate(-90deg)}
 .gesture-cursor{position:absolute;z-index:4;width:26px;height:26px;margin:-13px 0 0 -13px;border:1.5px solid #ffffffe6;border-radius:50%;background:#80808066;box-shadow:0 0 0 1px #4c4c4c66,0 2px 6px #00000026;pointer-events:none;will-change:transform,opacity}
 @keyframes glow-breathe{0%,100%{opacity:.8}50%{opacity:1}}
 @keyframes glow-a{0%,100%{opacity:1}33.33%,66.66%{opacity:0}}

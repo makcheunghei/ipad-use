@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "server"))
+import wda_image
 import wda_setup
 
 
@@ -687,6 +688,24 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(stored["recovery_phase"], "serving")
         self.assertIn("service_started_at", stored)
         self.assertNotIn("recovery_target", self.manager._job_status(stored))
+
+
+class IPadDiscoveryTests(unittest.TestCase):
+    def test_parse_devices_accepts_ipad(self):
+        doc = {"result": {"devices": [{"identifier": "core-1", "hardwareProperties": {
+            "reality": "physical", "deviceType": "iPad", "udid": "0000-IPAD", "marketingName": "iPad Pro 13-inch (M4)"},
+            "deviceProperties": {"osVersionNumber": "18.0"}, "connectionProperties": {}}]}}
+        devices = wda_setup.SetupManager.parse_devices(doc)
+        self.assertEqual(devices[0]["model"], "iPad Pro 13-inch (M4)")
+        self.assertEqual(devices[0]["name"], "iPad")
+
+    def test_xcdevice_platforms_include_ipad(self):
+        self.assertIn("com.apple.platform.iphoneos", wda_setup.XCDEVICE_PLATFORMS)
+
+    def test_ipad_screenshot_downscaled(self):
+        self.assertEqual(wda_image.fit_size(2064, 2752), (768, 1024))
+        self.assertEqual(wda_image.fit_size(2752, 2064), (1024, 768))
+        self.assertEqual(wda_image.fit_size(1668, 2420), (768, 1114))
 
 
 if __name__ == "__main__":

@@ -28,6 +28,9 @@ import urllib.parse
 import urllib.request
 import uuid
 
+# xcdevice reports iPads under the iphoneos platform; ipados is accepted defensively.
+XCDEVICE_PLATFORMS = {"com.apple.platform.iphoneos", "com.apple.platform.ipados"}
+
 WDA_COMMIT = "d17782422d55ff1e5e0ceb74eb1fd509cc0c35b6"
 WDA_VERSION = "16.14.0"
 WDA_REPOSITORY = "https://github.com/appium/WebDriverAgent.git"
@@ -207,7 +210,7 @@ class SetupManager:
             if isinstance(developer, dict):
                 developer = "enabled" if "enabled" in developer else "disabled" if "disabled" in developer else "unknown"
             result.append({"udid": hardware.get("udid", item.get("identifier")),
-                           "core_device_id": item.get("identifier"), "name": state.get("name", "iPhone"),
+                           "core_device_id": item.get("identifier"), "name": state.get("name", hardware.get("deviceType") or "iPhone"),
                            "model": hardware.get("marketingName"), "ios_version": version,
                            "pairing_state": connection.get("pairingState", "unknown"),
                            "connection_state": connection.get("state", connection.get("tunnelState", "unknown")),
@@ -229,12 +232,12 @@ class SetupManager:
                                 "ios_version": item.get("operatingSystemVersion"), "available": item.get("available"),
                                 "pairing_state": "unknown", "developer_mode": "unknown", "unlocked": "user_check_required"}
                                for item in json.loads(fallback["stdout"])
-                               if not item.get("simulator") and item.get("platform") == "com.apple.platform.iphoneos"]
+                               if not item.get("simulator") and item.get("platform") in XCDEVICE_PLATFORMS]
                 except (ValueError, TypeError, KeyError):
                     pass
             return {"ok": bool(document) or bool(devices), "devices": devices,
                     "selected_udid": self.config.get("udid"), "error": probe["stderr"] if not probe["ok"] else None,
-                    "next_steps": [] if devices else ["Connect iPhone by USB, unlock it, accept Trust This Computer yourself and open Xcode Devices and Simulators."]}
+                    "next_steps": [] if devices else ["Connect the iPhone or iPad by USB, unlock it, accept Trust This Computer yourself and open Xcode Devices and Simulators."]}
         finally:
             with contextlib.suppress(OSError):
                 os.unlink(name)
