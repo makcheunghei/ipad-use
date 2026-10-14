@@ -35,7 +35,7 @@ App 实际要求密码、PIN、验证码、Face ID / Touch ID，或手机需要�
 
 微信通讯录 / 会话列表读取慢时，按需读取 [微信长列表说明](references/wechat.md)；微博「消息 → 动态」慢时读取 [微博动态说明](references/weibo.md)。其他 App 的慢树、输出截断或可见文字缺失，按需读取 [App 场景与增补方法](references/app-snapshots.md)，区分深度、输出预算和自绘缺标签；新增 `references/<app>.md` 后补按需入口，不把单个页面的参数改成全局默认。
 
-自绘内容、遮挡或缺失标签需要视觉判断时才取截图。截图随同一结果以图片返回，已缩放到适合阅读的尺寸：图像像素乘以 `image.pixel_to_point` 的 `[x, y]` 得到设备点（iPhone / iPad 通用），不要按原始分辨率；iPad 截图分辨率较大，同样已缩放或 Mac 屏幕换算。screenshot 跳过 XML；both 同时提供树和图。若 App 出现分享浮层，处理当前状态，不循环重复同一路径截图。
+自绘内容、遮挡或缺失标签需要视觉判断时才取截图。截图随同一结果以图片返回，已缩放到适合阅读的尺寸：图像像素乘以 `image.pixel_to_point` 的 `[x, y]` 得到设备点（iPhone / iPad 通用），不要按原始分辨率或 Mac 屏幕换算；iPad 截图分辨率较大，同样已缩放。screenshot 跳过 XML；both 同时提供树和图。若 App 出现分享浮层，处理当前状态，不循环重复同一路径截图。
 
 ## 界面异常时先看截图，再决定操作
 
