@@ -48,6 +48,11 @@ class OrientedWDA(FakeWDA):
             return self.rotation
         return super().session(method, path, payload, timeout)
 
+    def source(self):
+        # A real source root names the foreground app, like activeAppInfo.
+        self.source_root["bundleId"] = self.app
+        return super().source()
+
 
 def rects(controller):
     nodes, viewport = controller.tree(include_invisible=True)
@@ -156,7 +161,61 @@ class LandscapeRectTests(unittest.TestCase):
         element = found["elements"][0]
         self.assertEqual(element["rect"], [12, 666, 100, 44])
         self.assertEqual(element["tap"], [62, 688])
-        self.assertIn((1376, 1032), controller._rotations)  # cache is keyed by viewport size
+        self.assertIn((1376, 1032, "com.example.phone"), controller._frames)  # keyed by viewport size and app
+
+    def expire_viewport(self, controller):
+        stamp, viewport = controller._viewport_cache
+        controller._viewport_cache = (stamp - 10, viewport)
+
+    def test_landscape_flip_without_tree_read(self):
+        wda, controller = self.make(LEFT)
+        rects(controller)
+        self.assertEqual(controller.describe({"element_id": "target", "index": 0})["tap"], [1250, 970])
+        wda.rotation = RIGHT  # 180 degree flip: same viewport size
+        self.expire_viewport(controller)
+        source_reads = sum(1 for call in wda.calls if call[1].startswith("/source"))
+        self.assertEqual(controller.describe({"element_id": "target", "index": 0})["tap"], [126, 62])
+        self.assertEqual(sum(1 for call in wda.calls if call[1].startswith("/source")), source_reads)
+
+    def test_flip_with_rotation_unavailable_uses_cached_geometry(self):
+        wda, controller = self.make(LEFT)
+        rects(controller)
+        wda.rotation = None
+        self.expire_viewport(controller)
+        self.assertEqual(controller.describe({"element_id": "target", "index": 0})["tap"], [1250, 970])
+
+    def test_unknown_side_is_asked_again_every_time(self):
+        wda, controller = self.make(None)
+        wda.nodes = [node("Safari", y=40, kind="Icon", x=20, width=80, height=90)]
+        rects(controller)
+        self.assertTrue(controller.rotation_unknown)
+        before = sum(1 for call in wda.calls if call[1] == "/rotation")
+        controller.describe({"element_id": "target", "index": 0})
+        controller.describe({"element_id": "target", "index": 0})
+        self.assertEqual(sum(1 for call in wda.calls if call[1] == "/rotation"), before + 2)
+        wda.rotation = LEFT
+        self.assertEqual(controller.describe({"element_id": "target", "index": 0})["tap"], [1250, 970])
+        self.assertFalse(controller.rotation_unknown)
+
+    def test_app_switch_rechecks_frame_shape(self):
+        wda, controller = self.make(LEFT)
+        rects(controller)
+        # Another app whose frames already match the landscape viewport.
+        wda.app, wda.source_root = "com.example.other", dict(LANDSCAPE)
+        wda.elements[0]["rect"] = {"x": 100, "y": 100, "width": 100, "height": 44}
+        self.expire_viewport(controller)
+        self.assertEqual(controller.describe({"element_id": "target", "index": 0})["tap"], [150, 122])
+
+    def test_failed_rotation_read_leaves_element_for_retry(self):
+        wda, controller = self.make(LEFT)
+        original = wda.source
+        wda.source = lambda: (_ for _ in ()).throw(WDAError("timeout", "source read failed"))
+        element = {"element_id": "target", "index": 0}
+        with self.assertRaises(WDAError):
+            controller.element_rect(element)
+        self.assertFalse(element.get("_rotated"))
+        wda.source = original
+        self.assertEqual(controller.element_rect(element)["x"], 1228)
 
     def test_portrait_is_noop(self):
         wda, controller = self.make(LEFT, size=PORTRAIT, root=PORTRAIT)

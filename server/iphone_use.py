@@ -124,7 +124,7 @@ READS={"doctor","observe","find","wait","metrics","apps"}
 READS.update(("screen","screen_frame"))
 DESCRIPTIONS["screen"]="Open or reuse the live iPhone / iPad screen in the Codex side panel. No phone actions or UI controls. Pause the preview before password/Face ID user takeover; resume after explicit completion. READY also opens or reuses this view by default."
 DESCRIPTIONS["screen_frame"]="App-only cached live preview and action cursor events. Never reads XML, starts sessions or occupies the phone operation lock."
-DESCRIPTIONS["screen_action"]="App-only toolbar of the live preview, pressed by the user: refresh the preview stream, send the iPhone Home, or copy a screenshot to the Mac clipboard. Refused while the preview is paused for authentication."
+DESCRIPTIONS["screen_action"]="App-only toolbar of the live preview, pressed by the user: refresh the preview stream, send the device Home, or copy a screenshot to the Mac clipboard. Refused while the preview is paused for authentication."
 
 
 def undocumented(value):
@@ -398,7 +398,7 @@ class Runtime:
             raise WDAError("preview_paused","Preview is paused; no gesture was sent.",details={"action_executed":False})
         if self.client.request("GET","/wda/locked").get("value") is not False:
             self.screen.set_paused(True,reason="device_locked")
-            raise WDAError("phone_locked","Unlock the iPhone before using the preview.",details={"action_executed":False})
+            raise WDAError("phone_locked","Unlock the device before using the preview.",details={"action_executed":False})
         viewport=self.phone.viewport()
         if args["action"]=="viewport":return {"viewport":viewport}
         if any(args[key]!=viewport[key] for key in ("width","height")):
@@ -445,7 +445,7 @@ class Runtime:
             finally:probe.close()
             return {"ok":True,"action":action,"service_ready":ready,**state,**self.screen.pause_status()}
         if self.screen.paused():
-            raise WDAError("preview_paused","The preview is paused while the user authenticates on the iPhone. No capture or phone action was made.",details={"action_executed":False})
+            raise WDAError("preview_paused","The preview is paused while the user authenticates on the device. No capture or phone action was made.",details={"action_executed":False})
         client=WDAClient(self.base_url,timeout=8)
         try:
             if action=="home":
@@ -453,7 +453,7 @@ class Runtime:
                 with lock_path.open("a") as lock:
                     lock_path.chmod(0o600)
                     try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-                    except BlockingIOError:raise WDAError("device_busy","The iPhone is in the middle of another operation. Try again in a moment; nothing was sent.",details={"action_executed":False})
+                    except BlockingIOError:raise WDAError("device_busy","The device is in the middle of another operation. Try again in a moment; nothing was sent.",details={"action_executed":False})
                     try:client.request("POST","/wda/homescreen",{})
                     finally:fcntl.flock(lock,fcntl.LOCK_UN)
                 self.phone.external_action()
@@ -481,7 +481,7 @@ class Runtime:
         except Exception:lock_pause=None
         status=self.client.request("GET","/status").get("value") or {}
         if status.get("ready") is not True:raise WDAError("not_ready","PUA is not accepting commands. Run pua_doctor and inspect setup status.")
-        if self.client.request("GET","/wda/locked").get("value") is not False:raise WDAError("phone_locked","Unlock the iPhone yourself, keep it awake, and verify READY again.")
+        if self.client.request("GET","/wda/locked").get("value") is not False:raise WDAError("phone_locked","Unlock the device yourself, keep it awake, and verify READY again.")
         sid=self.client.ensure_session()
         observation=self.phone.observe("both" if screenshot else "tree")
         if observation.get("total_nodes",0)==0 and self.setup_manager.mirroring_running():raise WDAError("mirroring_conflict","iPhone Mirroring is running and PUA exposes an empty phone tree. Quit Mirroring, unlock if needed, then verify READY again.")
@@ -588,7 +588,7 @@ class Runtime:
                     self.client.clear_metrics();self.phone.tool_records.clear();self.responses.clear();self._replied_at=None
                 return result
             if op in ("tap","swipe","type_text","launch_app","press_button","batch","scroll_find","collect_list"):
-                if self.client.request("GET","/wda/locked").get("value") is not False:raise WDAError("phone_locked","Unlock the iPhone yourself before operations; observe again afterward.")
+                if self.client.request("GET","/wda/locked").get("value") is not False:raise WDAError("phone_locked","Unlock the device yourself before operations; observe again afterward.")
             return getattr(self.phone,op)(**args)
         except WDAError as exc:
             error=exc.code

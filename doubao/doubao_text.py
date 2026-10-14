@@ -49,7 +49,7 @@ SKILLS = {
     "skills/iphone-use/references/authentication.md": retell(base.SKILLS["skills/iphone-use/references/authentication.md"], [
         """在豆包工作中调用 `interaction.ask`，按该工具当前的实际 schema 填写；本对话没有提问工具时在回复里直接问并停下。例如当前明确显示 Face ID 时：
 
-- 问题：当前 App 需要 Face ID 验证。请在 iPhone 上完成认证并停留在目标页面；完成后选择「已完成继续」，我会接着读取剩余明细。
+- 问题：当前 App 需要 Face ID 验证。请在 iPhone / iPad 上完成认证并停留在目标页面；完成后选择「已完成继续」，我会接着读取剩余明细。
 - 选项：「已完成继续」、「暂时无法完成」""",
         "以用户实际提交的选项或明确回复为准；提问被跳过、超时、没有答复，或工具在用户作答前就返回，都不能当作完成。",
     ], "skills/iphone-use/references/authentication.md"),

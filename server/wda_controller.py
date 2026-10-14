@@ -23,7 +23,8 @@ SELECTOR_FIELDS = {"label","label_contains","name","value","type","enabled","pre
 CANDIDATE_LIMIT = 8
 # Bounds checks reuse the viewport briefly; an observation or a supplied ID reads it again.
 VIEWPORT_TTL = 30
-# Element rects are checked against a viewport no older than this, so a rotation is noticed.
+# Before converting an element rect, /window/size, /rotation and the foreground app are
+# re-read once this many seconds have passed, so a device turn or app switch is noticed.
 ROTATION_VIEWPORT_TTL = 1.5
 ROTATION_UNKNOWN_WARNING = ("rotation_unknown: the viewport is landscape but element frames are portrait and the "
                             "rotation direction could not be determined; element positions were left unconverted. "
@@ -163,8 +164,11 @@ class PhoneController:
         self._screen_targets={}
         self._viewport_cache=None
         self._rotation=None
-        # (viewport width, height) -> rotation tuple, or None when frames already match.
-        self._rotations={}
+        # (viewport width, height, foreground app) -> frame shape seen by the last source read:
+        # None when frames match the viewport, else (portrait_width, portrait_height, geometry side).
+        # The landscape side itself is never cached here; /rotation is re-read with the viewport.
+        self._frames={}
+        self._probe=None  # (viewport cache stamp, /rotation side, foreground app)
         self.rotation_unknown=False
         self._source_app=None
         self._deadline=None
@@ -181,12 +185,14 @@ class PhoneController:
         """The user acted on the phone from the preview toolbar: earlier focus and geometry may be gone."""
         self.accepted_actions+=1
         self._viewport_cache=None
+        self._frames.clear();self._probe=None
         self.pending_input=None
 
     def reset(self):
         """Forget context tied to a PUA session that was closed or replaced."""
         self.snapshots.clear()
         self._viewport_cache=None
+        self._frames.clear();self._probe=None
         self.pending_input=None
 
     def screen_event(self,kind,**kwargs):
@@ -248,13 +254,29 @@ class PhoneController:
         orientation through fb_rotationMapping, z=270 when the device top edge is on
         the left (home side right) and z=90 when it is on the right.
         """
+        frame=self.portrait_frame(root,viewport,nodes)
+        if frame is None:
+            return None
+        return self.rotation_for(frame,self.rotation_side())
+
+    @staticmethod
+    def portrait_frame(root,viewport,nodes=()):
+        """(portrait_width, portrait_height, geometry side) when frames are portrait in a landscape viewport."""
         try:size=(float(root["width"]),float(root["height"]))
         except (KeyError,ValueError,TypeError):return None
         vw,vh=float(viewport["width"]),float(viewport["height"])
         if not (vw>vh and size==(vh,vw)):
             return None
-        side=self.rotation_side() or self.rotation_side_from_geometry(nodes,size)
-        return (side,size[0],size[1]) if side else "unknown"
+        return (size[0],size[1],PhoneController.rotation_side_from_geometry(nodes,size))
+
+    @staticmethod
+    def rotation_for(frame,side):
+        """Combine a fresh /rotation side (or the geometry fallback) with the recorded frame."""
+        if frame is None:
+            return None
+        portrait_width,portrait_height,geometry=frame
+        side=side or geometry
+        return (side,portrait_width,portrait_height) if side else "unknown"
 
     def rotation_side(self):
         try:value=self.client.session("GET","/rotation")
@@ -291,15 +313,30 @@ class PhoneController:
         return {**rect,**mapped}
 
     def current_rotation(self):
-        """Rotation for the current viewport, read fresh enough to notice a device turn."""
+        """Rotation for the current viewport, side and foreground app, read fresh enough to notice a turn."""
         viewport=self.viewport(ROTATION_VIEWPORT_TTL)
-        key=(viewport["width"],viewport["height"])
         if viewport["width"]<=viewport["height"]:
             self._rotation=None;self.rotation_unknown=False
             return None
-        if key not in self._rotations:
-            self.tree(include_invisible=True)  # one source read records the frame for this viewport
-        self._rotation=self._rotations.get(key)
+        stamp=self._viewport_cache[0] if self._viewport_cache else None
+        if not self._probe or self._probe[0]!=stamp or stamp is None:
+            # The viewport was just re-read: re-read the side (a 180 degree flip keeps the same
+            # viewport) and the foreground app (frames belong to the app that drew them).
+            try:app=self.active_app()
+            except WDAError:app=None
+            self._probe=(stamp,self.rotation_side(),app)
+        _,side,app=self._probe
+        if side is None:
+            # Unknown side is never cached: ask /rotation again on every use.
+            side=self.rotation_side()
+            if side:self._probe=(self._probe[0],side,app)
+        key=(viewport["width"],viewport["height"],app)
+        if key not in self._frames:
+            # Cold cache: one source read records this app's frame shape. It also refreshes
+            # _source_app, which is the same foreground app just read.
+            self.tree(include_invisible=True)
+            key=(viewport["width"],viewport["height"],self._source_app or app)
+        self._rotation=self.rotation_for(self._frames.get(key),side)
         self.rotation_unknown=self._rotation=="unknown"
         return self._rotation
 
@@ -329,6 +366,7 @@ class PhoneController:
         # usually answers what activeAppInfo and window/size would be asked separately.
         bundle=root.get("bundleId")
         self._source_app=bundle if isinstance(bundle,str) and bundle and not bundle.startswith("local.pid.") else None
+        before=self._viewport_cache[0] if self._viewport_cache else None
         viewport=self.source_viewport(root)
         raw=[]
         for element in tree.iter():
@@ -342,8 +380,16 @@ class PhoneController:
             if not all(math.isfinite(n) for n in rect.values()):
                 continue
             raw.append((a,rect))
-        rotation=self.portrait_frame_rotation(root,viewport,[{"rect":r} for _,r in raw])
-        self._rotations[(viewport["width"],viewport["height"])]=self._rotation=rotation
+        frame=self.portrait_frame(root,viewport,[{"rect":r} for _,r in raw])
+        fresh=self._probe is not None and before is not None and self._probe[0]==before
+        side=(self._probe[1] if fresh else self.rotation_side()) if frame else None
+        rotation=self.rotation_for(frame,side)
+        probe_app=self._probe[2] if self._probe else None
+        if self._viewport_cache and frame:
+            self._probe=(self._viewport_cache[0],side,self._source_app or probe_app)
+        # Only the frame shape is cached (an "unknown" side is re-derived on every read).
+        self._frames[(viewport["width"],viewport["height"],self._source_app or probe_app)]=frame
+        self._rotation=rotation
         self.rotation_unknown=rotation=="unknown"
         nodes=[]
         for a,rect in raw:
@@ -508,10 +554,10 @@ class PhoneController:
         if not isinstance(rect,dict) or not all(isinstance(rect.get(key),(int,float)) and not isinstance(rect.get(key),bool) and math.isfinite(rect[key]) for key in ("x","y","width","height")):
             fail("invalid_response","PUA element rect is not numeric.")
         if not element.get("_rotated"):
-            element["_rotated"]=True
-            rotation=self.current_rotation()
+            rotation=self.current_rotation()  # may raise; the element is then left unmarked for a retry
             if isinstance(rotation,tuple):
                 element["rect"]=rect=self.to_viewport_rect(rect,rotation)
+            element["_rotated"]=True
         return rect
 
     def element_hittable(self,element):
@@ -679,7 +725,7 @@ class PhoneController:
             finite(x,"x");finite(y,"y")
             viewport=self.guard(observation_id)
             if x>=viewport["width"] or y>=viewport["height"]:
-                fail("invalid_argument","Coordinates are outside the iPhone viewport.")
+                fail("invalid_argument","Coordinates are outside the device viewport.")
             chosen=None
             self.post("/wda/tap",{"x":x,"y":y})
         result=self.after(expect,observe)

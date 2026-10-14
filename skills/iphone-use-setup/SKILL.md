@@ -3,7 +3,7 @@ name: iphone-use-setup
 description: 配置 PUA（Phone Use Agent），在用户自己的 iPhone 或 iPad 上安装、签名并启动设备端执行服务；本对话首次使用先直接 setup，再验 READY，服务未启动时复用配置与构建启动，诊断 USB 和 Xcode 连接并打开设备屏幕侧边栏；适用于首次配置、冷启动、断线恢复或签名过期。
 ---
 
-# 把 iPhone 配置为 READY
+# 把 iPhone / iPad 配置为 READY
 
 使用本插件的 MCP 工具完成可重复的探测、构建、启动和连接；不要在每次任务中临时生成 Python 客户端。已有可用 PUA 时先复用，避免每个任务都重建或重装。
 
