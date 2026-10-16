@@ -167,6 +167,55 @@ class LandscapeRectTests(unittest.TestCase):
         stamp, viewport = controller._viewport_cache
         controller._viewport_cache = (stamp - 10, viewport)
 
+    def test_tree_detects_portrait_to_landscape_with_unchanged_source_size(self):
+        wda, controller = self.make(LEFT, size=PORTRAIT, root=PORTRAIT)
+        rects(controller)
+        wda.size = dict(LANDSCAPE)
+        self.expire_viewport(controller)
+        found, viewport = rects(controller)
+        self.assertEqual(viewport["width"], 1376)
+        self.assertEqual(found["Dock"]["y"], 1032 - 115)
+
+    def test_tree_refreshes_expired_rotation_even_when_probe_matches_cache(self):
+        wda, controller = self.make(LEFT)
+        rects(controller)
+        wda.rotation = RIGHT
+        # Let both cache and probe age naturally without changing their shared stamp.
+        with unittest.mock.patch("wda_controller.time.monotonic", return_value=10**9):
+            found, _ = rects(controller)
+        self.assertEqual(found["Safari"], {"x": 1246, "y": 20, "width": 90, "height": 80})
+
+    def test_tree_retries_previously_unknown_rotation(self):
+        wda, controller = self.make(None)
+        wda.nodes = [node("Safari", y=40, kind="Icon", x=20, width=80, height=90)]
+        rects(controller)
+        self.assertTrue(controller.rotation_unknown)
+        wda.rotation = RIGHT
+        found, _ = rects(controller)
+        self.assertFalse(controller.rotation_unknown)
+        self.assertEqual(found["Safari"]["x"], 1246)
+
+    def test_frequent_tree_reads_do_not_extend_portrait_viewport_cache(self):
+        wda, controller = self.make(LEFT, size=PORTRAIT, root=PORTRAIT)
+        with unittest.mock.patch("wda_controller.time.monotonic", return_value=100) as clock:
+            rects(controller)
+            wda.size = dict(LANDSCAPE)
+            for stamp in (100.5, 101, 101.6):
+                clock.return_value = stamp
+                found, viewport = rects(controller)
+        self.assertEqual(viewport["width"], 1376)
+        self.assertEqual(found["Dock"]["y"], 917)
+
+    def test_frequent_tree_reads_do_not_extend_landscape_rotation_cache(self):
+        wda, controller = self.make(LEFT)
+        with unittest.mock.patch("wda_controller.time.monotonic", return_value=100) as clock:
+            rects(controller)
+            wda.rotation = RIGHT
+            for stamp in (100.5, 101, 101.6):
+                clock.return_value = stamp
+                found, _ = rects(controller)
+        self.assertEqual(found["Safari"]["x"], 1246)
+
     def test_landscape_flip_without_tree_read(self):
         wda, controller = self.make(LEFT)
         rects(controller)

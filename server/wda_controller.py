@@ -232,14 +232,14 @@ class PhoneController:
         return dict(result)
 
     def source_viewport(self,root):
-        """Reuse the cached window size while the source root still has exactly that size."""
+        """Briefly reuse matching dimensions; source frames can stay portrait after rotation."""
         cached=self._viewport_cache
         try:size=(float(root["width"]),float(root["height"]))
         except (KeyError,ValueError):return self.viewport()
-        if not cached or (cached[1]["width"],cached[1]["height"])!=size:
+        if (not cached or (cached[1]["width"],cached[1]["height"])!=size
+                or time.monotonic()-cached[0]>ROTATION_VIEWPORT_TTL):
             # First read, or the root changed shape (rotation): ask WDA for the real window size.
             return self.viewport()
-        self._viewport_cache=(time.monotonic(),cached[1])
         return dict(cached[1])
 
     def portrait_frame_rotation(self,root,viewport,nodes=()):
@@ -385,12 +385,14 @@ class PhoneController:
                 continue
             raw.append((a,rect))
         frame=self.portrait_frame(root,viewport,[{"rect":r} for _,r in raw])
-        fresh=self._probe is not None and before is not None and self._probe[0]==before
+        fresh=(self._probe is not None and before is not None and self._probe[0]==before
+               and self._probe[1] is not None and time.monotonic()-before<=ROTATION_VIEWPORT_TTL)
         side=(self._probe[1] if fresh else self.rotation_side()) if frame else None
         rotation=self.rotation_for(frame,side)
         probe_app=self._probe[2] if self._probe else None
         if self._viewport_cache and frame:
-            self._probe=(self._viewport_cache[0],side,self._source_app or probe_app)
+            # Reusing a side must not renew its age indefinitely during repeated tree reads.
+            self._probe=(before if fresh else self._viewport_cache[0],side,self._source_app or probe_app)
         # Only the frame shape is cached (an "unknown" side is re-derived on every read).
         self._frames[(viewport["width"],viewport["height"],self._source_app or probe_app)]=frame
         self._rotation=rotation
