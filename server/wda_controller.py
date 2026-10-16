@@ -384,7 +384,22 @@ class PhoneController:
             if not all(math.isfinite(n) for n in rect.values()):
                 continue
             raw.append((a,rect))
-        frame=self.portrait_frame(root,viewport,[{"rect":r} for _,r in raw])
+        frame_root=root
+        if viewport["width"]>viewport["height"]:
+            # On real iPads the Application can report landscape while its point-sized
+            # Windows and descendants remain portrait. Ignore native-pixel overlays;
+            # only use window evidence when all screen-sized point windows agree.
+            landscape=(viewport["width"],viewport["height"])
+            portrait=landscape[::-1]
+            window_sizes=set()
+            for window in tree:
+                if window.get("type")!="XCUIElementTypeWindow":continue
+                try:size=(float(window.get("width",0)),float(window.get("height",0)))
+                except ValueError:continue
+                if size in (landscape,portrait):window_sizes.add(size)
+            if window_sizes=={portrait}:
+                frame_root={**root,"width":portrait[0],"height":portrait[1]}
+        frame=self.portrait_frame(frame_root,viewport,[{"rect":r} for _,r in raw])
         fresh=(self._probe is not None and before is not None and self._probe[0]==before
                and self._probe[1] is not None and time.monotonic()-before<=ROTATION_VIEWPORT_TTL)
         side=(self._probe[1] if fresh else self.rotation_side()) if frame else None

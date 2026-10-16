@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 import unittest.mock
+import xml.etree.ElementTree as ET
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "server"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -288,6 +289,29 @@ class LandscapeRectTests(unittest.TestCase):
         found, _ = rects(controller)
         self.assertEqual(found["Dock"], {"x": 8, "y": 300, "width": 107, "height": 776})
         self.assertNotIn(("GET", "/rotation", None), wda.calls)
+
+    def test_landscape_app_root_with_portrait_windows_maps_real_device_frames(self):
+        for rotation, expected in ((LEFT, [435, 936, 69, 69]), (RIGHT, [435, 936, 69, 69])):
+            with self.subTest(rotation=rotation):
+                wda, controller = self.make(rotation, root=LANDSCAPE)
+                wda.nodes = [node("Safari", kind="Icon", x=27 if rotation == LEFT else 936,
+                                  y=435 if rotation == LEFT else 872, width=69, height=69)]
+                original = wda.source
+                def source():
+                    root = ET.fromstring(original())
+                    window = ET.Element("XCUIElementTypeWindow", {
+                        "type": "XCUIElementTypeWindow", "width": "1032", "height": "1376"})
+                    for child in list(root):
+                        root.remove(child)
+                        window.append(child)
+                    root.append(window)
+                    # Real SpringBoard also includes pixel-sized overlay windows.
+                    ET.SubElement(root, "XCUIElementTypeWindow", {
+                        "type": "XCUIElementTypeWindow", "width": "2752", "height": "2064"})
+                    return ET.tostring(root, encoding="unicode")
+                wda.source = source
+                found, _ = rects(controller)
+                self.assertEqual(list(found["Safari"].values()), expected)
 
     def test_rotation_is_cached_per_viewport(self):
         wda, controller = self.make(LEFT)
