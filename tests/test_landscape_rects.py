@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 import unittest.mock
+import xml.etree.ElementTree as ET
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "server"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -167,6 +168,55 @@ class LandscapeRectTests(unittest.TestCase):
         stamp, viewport = controller._viewport_cache
         controller._viewport_cache = (stamp - 10, viewport)
 
+    def test_tree_detects_portrait_to_landscape_with_unchanged_source_size(self):
+        wda, controller = self.make(LEFT, size=PORTRAIT, root=PORTRAIT)
+        rects(controller)
+        wda.size = dict(LANDSCAPE)
+        self.expire_viewport(controller)
+        found, viewport = rects(controller)
+        self.assertEqual(viewport["width"], 1376)
+        self.assertEqual(found["Dock"]["y"], 1032 - 115)
+
+    def test_tree_refreshes_expired_rotation_even_when_probe_matches_cache(self):
+        wda, controller = self.make(LEFT)
+        rects(controller)
+        wda.rotation = RIGHT
+        # Let both cache and probe age naturally without changing their shared stamp.
+        with unittest.mock.patch("wda_controller.time.monotonic", return_value=10**9):
+            found, _ = rects(controller)
+        self.assertEqual(found["Safari"], {"x": 1246, "y": 20, "width": 90, "height": 80})
+
+    def test_tree_retries_previously_unknown_rotation(self):
+        wda, controller = self.make(None)
+        wda.nodes = [node("Safari", y=40, kind="Icon", x=20, width=80, height=90)]
+        rects(controller)
+        self.assertTrue(controller.rotation_unknown)
+        wda.rotation = RIGHT
+        found, _ = rects(controller)
+        self.assertFalse(controller.rotation_unknown)
+        self.assertEqual(found["Safari"]["x"], 1246)
+
+    def test_frequent_tree_reads_do_not_extend_portrait_viewport_cache(self):
+        wda, controller = self.make(LEFT, size=PORTRAIT, root=PORTRAIT)
+        with unittest.mock.patch("wda_controller.time.monotonic", return_value=100) as clock:
+            rects(controller)
+            wda.size = dict(LANDSCAPE)
+            for stamp in (100.5, 101, 101.6):
+                clock.return_value = stamp
+                found, viewport = rects(controller)
+        self.assertEqual(viewport["width"], 1376)
+        self.assertEqual(found["Dock"]["y"], 917)
+
+    def test_frequent_tree_reads_do_not_extend_landscape_rotation_cache(self):
+        wda, controller = self.make(LEFT)
+        with unittest.mock.patch("wda_controller.time.monotonic", return_value=100) as clock:
+            rects(controller)
+            wda.rotation = RIGHT
+            for stamp in (100.5, 101, 101.6):
+                clock.return_value = stamp
+                found, _ = rects(controller)
+        self.assertEqual(found["Safari"]["x"], 1246)
+
     def test_landscape_flip_without_tree_read(self):
         wda, controller = self.make(LEFT)
         rects(controller)
@@ -239,6 +289,29 @@ class LandscapeRectTests(unittest.TestCase):
         found, _ = rects(controller)
         self.assertEqual(found["Dock"], {"x": 8, "y": 300, "width": 107, "height": 776})
         self.assertNotIn(("GET", "/rotation", None), wda.calls)
+
+    def test_landscape_app_root_with_portrait_windows_maps_real_device_frames(self):
+        for rotation, expected in ((LEFT, [435, 936, 69, 69]), (RIGHT, [435, 936, 69, 69])):
+            with self.subTest(rotation=rotation):
+                wda, controller = self.make(rotation, root=LANDSCAPE)
+                wda.nodes = [node("Safari", kind="Icon", x=27 if rotation == LEFT else 936,
+                                  y=435 if rotation == LEFT else 872, width=69, height=69)]
+                original = wda.source
+                def source():
+                    root = ET.fromstring(original())
+                    window = ET.Element("XCUIElementTypeWindow", {
+                        "type": "XCUIElementTypeWindow", "width": "1032", "height": "1376"})
+                    for child in list(root):
+                        root.remove(child)
+                        window.append(child)
+                    root.append(window)
+                    # Real SpringBoard also includes pixel-sized overlay windows.
+                    ET.SubElement(root, "XCUIElementTypeWindow", {
+                        "type": "XCUIElementTypeWindow", "width": "2752", "height": "2064"})
+                    return ET.tostring(root, encoding="unicode")
+                wda.source = source
+                found, _ = rects(controller)
+                self.assertEqual(list(found["Safari"].values()), expected)
 
     def test_rotation_is_cached_per_viewport(self):
         wda, controller = self.make(LEFT)
